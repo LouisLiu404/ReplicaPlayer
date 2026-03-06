@@ -6,7 +6,8 @@ interface NavigationRailProps {
   activeView: AppView;
   roots: LibraryRoot[];
   selectedRootId: string;
-  visibleTrackCount: number;
+  trackCount: number;
+  isLoadingLibrary: boolean;
   onSelectRoot: (rootId: string) => void;
   onOpenSettings: () => void;
 }
@@ -15,14 +16,20 @@ export function NavigationRail({
   activeView,
   roots,
   selectedRootId,
-  visibleTrackCount,
+  trackCount,
+  isLoadingLibrary,
   onSelectRoot,
   onOpenSettings
 }: NavigationRailProps) {
+  const allFoldersCopy = isLoadingLibrary
+    ? "Loading…"
+    : `${trackCount} ${trackCount === 1 ? "track" : "tracks"}`;
+
   return (
     <aside className="navigation-rail">
       <div className="rail-topmark" aria-hidden="true">
         <PlayerGlyph className="rail-topmark-icon" />
+        <span className="rail-topmark-label">Replica</span>
       </div>
 
       <div className="rail-roots">
@@ -38,7 +45,7 @@ export function NavigationRail({
         >
           <div>
             <strong>All folders</strong>
-            <small>{visibleTrackCount} visible tracks</small>
+            <small>{allFoldersCopy}</small>
           </div>
         </button>
 
@@ -47,17 +54,16 @@ export function NavigationRail({
         ) : (
           <div className="rail-root-list">
             {roots.map((root) => (
-              <div key={root.id} className={`rail-root-card ${selectedRootId === root.id ? "selected" : ""}`}>
-                <button
-                  type="button"
-                  className="rail-root-button"
-                  onClick={() => onSelectRoot(root.id)}
-                  title={root.path}
-                >
-                  <strong>{root.displayName}</strong>
-                  <small>{root.status === "available" ? "Available" : "Unavailable"}</small>
-                </button>
-              </div>
+              <button
+                key={root.id}
+                type="button"
+                className={`rail-root-card ${selectedRootId === root.id ? "selected" : ""}`}
+                onClick={() => onSelectRoot(root.id)}
+                title={root.path}
+              >
+                <strong>{root.displayName}</strong>
+                <small>{root.status === "available" ? "Available" : "Unavailable"}</small>
+              </button>
             ))}
           </div>
         )}

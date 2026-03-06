@@ -70,15 +70,23 @@ export function BottomPlayer({
   return (
     <footer className="bottom-player">
       <div className="bottom-player-current">
-        <div className="bottom-player-art">
-          {track?.artworkUrl ? (
-            <img src={track.artworkUrl} alt={track.title} className="bottom-player-image" />
-          ) : (
-            <div className="bottom-player-fallback">
-              <DiscIcon className="bottom-player-glyph" />
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          className="bottom-player-art-button"
+          onClick={onTogglePanel}
+          disabled={!track}
+          aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
+        >
+          <div className="bottom-player-art">
+            {track?.artworkUrl ? (
+              <img src={track.artworkUrl} alt={track.title} className="bottom-player-image" />
+            ) : (
+              <div className="bottom-player-fallback">
+                <DiscIcon className="bottom-player-glyph" />
+              </div>
+            )}
+          </div>
+        </button>
 
         <div className="bottom-player-copy">
           <strong>{track?.title ?? "Nothing selected"}</strong>

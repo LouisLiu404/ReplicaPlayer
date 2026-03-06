@@ -107,6 +107,7 @@ export interface LibraryApi {
   pickRoots(): Promise<string[]>;
   addRoots(paths: string[]): Promise<ImportSummary>;
   removeRoot(rootId: string): Promise<void>;
+  removeTrack(trackId: string): Promise<void>;
   rescan(): Promise<ScanJobId>;
   onScanProgress(callback: (progress: ScanProgress) => void): () => void;
   queryTracks(filter?: TrackQuery): Promise<TrackListItem[]>;
@@ -119,6 +120,7 @@ export type WorkerMethod =
   | "init"
   | "addRoots"
   | "removeRoot"
+  | "removeTrack"
   | "rescan"
   | "queryTracks"
   | "getTrack"

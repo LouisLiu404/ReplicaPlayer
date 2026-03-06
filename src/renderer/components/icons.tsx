@@ -273,10 +273,12 @@ export function ShuffleIcon(props: IconProps) {
 export function RepeatIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
-      <path d="m16 4 4 4-4 4" />
-      <path d="M20 8H9a4 4 0 0 0 0 8h2" />
-      <path d="m8 12-4 4 4 4" />
-      <path d="M4 16h11a4 4 0 0 0 0-8h-2" />
+      <path d="M6 8h10" />
+      <path d="m13 5 3 3-3 3" />
+      <path d="M16 8v3" />
+      <path d="M18 16H8" />
+      <path d="m11 13-3 3 3 3" />
+      <path d="M8 16v-3" />
     </BaseIcon>
   );
 }

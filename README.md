@@ -25,7 +25,10 @@ Replica Player is a macOS-only Electron music player for local files. It indexes
   - embedded plain lyrics
   - adjacent `.txt`
 - Real-time synced lyric highlighting.
-- Manual rescan flow with persistence and missing/offline track handling.
+- Manual rescan flow with a modal progress view that lists scanned file names in order.
+- Cached folder-playlist queries and explicit loading states for faster folder switching.
+- Missing-track cleanup prompt so deleted files can be removed from the library index.
+- Fixed-size desktop window tuned for the current macOS layout.
 - Sandboxed renderer with preload-only IPC and custom protocols instead of direct `file://` access.
 
 ## Stack
@@ -82,9 +85,9 @@ npm run make
 
 ## How It Works
 
-1. Add one or more music folders from the sidebar.
+1. Open `Settings` from the sidebar and add one or more music folders.
 2. Replica Player stores the canonical root paths under Electron `userData`.
-3. A rescan walks each saved root, parses changed files, and updates the SQLite index.
+3. A manual rescan opens a modal, walks each saved root, parses changed files, and updates the SQLite index.
 4. The renderer queries the indexed library over preload IPC.
 5. Playback and artwork are served through a privileged custom protocol and converted to `blob:` URLs in the renderer.
 
@@ -108,6 +111,22 @@ App data is stored in Electron `userData` and includes:
 - saved library root metadata
 
 The app indexes files in place. It does not copy music into an app-managed media folder.
+
+## Scan UX
+
+- Adding folders triggers an immediate rescan modal.
+- Manual rescans use the same modal.
+- The modal shows:
+  - current scan phase
+  - processed vs discovered file counts
+  - scanned file names in order
+  - an `OK` button when the scan completes or fails
+
+## Performance Notes
+
+- Folder playlist queries are cached between rescans, so switching back to an already-opened folder scope is immediate.
+- Search input uses deferred updates to avoid blocking the renderer on rapid typing.
+- When a query still takes time, the app shows explicit loading UI instead of leaving the track list looking unresponsive.
 
 ## Project Layout
 
@@ -150,6 +169,7 @@ src/
 ## Current Limitations
 
 - macOS only
+- fixed-size window, no user resizing
 - manual rescan only, no background file watching
 - local lyrics only, no online lyric provider
 - no playlists

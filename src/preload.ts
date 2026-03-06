@@ -6,6 +6,7 @@ const api: LibraryApi = {
   pickRoots: () => ipcRenderer.invoke("library:pick-roots"),
   addRoots: (paths) => ipcRenderer.invoke("library:add-roots", paths),
   removeRoot: (rootId) => ipcRenderer.invoke("library:remove-root", rootId),
+  removeTrack: (trackId) => ipcRenderer.invoke("library:remove-track", trackId),
   rescan: () => ipcRenderer.invoke("library:rescan"),
   onScanProgress: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: ScanProgress) => {

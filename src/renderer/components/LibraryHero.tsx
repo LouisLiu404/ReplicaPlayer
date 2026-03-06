@@ -27,14 +27,10 @@ export function LibraryHero({
   onFilterChange
 }: LibraryHeroProps) {
   const filters: Array<{ id: AvailabilityFilter; label: string; count: number }> = [
-    { id: "all", label: "All", count: filterCounts.all },
-    { id: "available", label: "Available", count: filterCounts.available },
     { id: "missing", label: "Missing", count: filterCounts.missing },
     { id: "offline", label: "Unavailable", count: filterCounts.offline }
   ];
-  const visibleFilters = filters.filter(
-    (filter) => filter.id === "all" || filter.id === "available" || filter.count > 0 || activeFilter === filter.id
-  );
+  const visibleFilters = filters.filter((filter) => filter.count > 0 || activeFilter === filter.id);
 
   return (
     <section className="library-hero">
@@ -44,9 +40,6 @@ export function LibraryHero({
           <h1>{currentRootLabel}</h1>
           <span className="hero-count-pill">{isLoading ? "Loading…" : `${visibleTrackCount} tracks`}</span>
         </div>
-        <p className="library-hero-description">
-          Search your local collection, keep it indexed between launches, and jump between queue, lyrics, and details without leaving the player.
-        </p>
       </div>
 
       <p className="library-summary-copy">{libraryMessage}</p>
@@ -56,7 +49,7 @@ export function LibraryHero({
           {filterCounts.missing > 0 ? (
             <div className="hero-note-pill warning">
               <strong>{filterCounts.missing}</strong>
-              <span>missing files need a rescan or cleanup</span>
+              <span>missing tracks can be removed from the library after review</span>
             </div>
           ) : null}
           {filterCounts.offline > 0 ? (
@@ -68,19 +61,21 @@ export function LibraryHero({
         </div>
       ) : null}
 
-      <div className="filter-chip-row" role="tablist" aria-label="Track availability filters">
-        {visibleFilters.map((filter) => (
-          <button
-            key={filter.id}
-            type="button"
-            className={`filter-chip ${activeFilter === filter.id ? "active" : ""}`}
-            onClick={() => onFilterChange(filter.id)}
-          >
-            <span>{filter.label}</span>
-            <strong>{filter.count}</strong>
-          </button>
-        ))}
-      </div>
+      {visibleFilters.length > 0 ? (
+        <div className="filter-chip-row" role="tablist" aria-label="Track availability filters">
+          {visibleFilters.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={`filter-chip ${activeFilter === filter.id ? "active" : ""}`}
+              onClick={() => onFilterChange(filter.id)}
+            >
+              <span>{filter.label}</span>
+              <strong>{filter.count}</strong>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

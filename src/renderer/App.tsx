@@ -18,6 +18,7 @@ import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
 import { LibraryHero } from "./components/LibraryHero";
 import { NavigationRail } from "./components/NavigationRail";
+import { ScanProgressModal } from "./components/ScanProgressModal";
 import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
@@ -31,8 +32,17 @@ type AvailabilityCounts = {
 };
 
 type PlaybackMode = "normal" | "shuffle" | "repeat-all" | "repeat-one";
+type ManualScanModalState = {
+  jobId: string;
+  status: "scanning" | "completed" | "error";
+  processedFiles: number;
+  discoveredFiles: number;
+  message: string;
+  files: string[];
+};
 
 const VOLUME_STORAGE_KEY = "replica-player:volume-percent";
+const PLAYBACK_MODE_STORAGE_KEY = "replica-player:playback-mode";
 
 function readStoredVolume(): number {
   try {
@@ -50,6 +60,28 @@ function readStoredVolume(): number {
   } catch {
     return 100;
   }
+}
+
+function readStoredPlaybackMode(): PlaybackMode {
+  try {
+    const raw = window.localStorage.getItem(PLAYBACK_MODE_STORAGE_KEY);
+    if (raw === "shuffle" || raw === "repeat-all" || raw === "repeat-one" || raw === "normal") {
+      return raw;
+    }
+  } catch {
+    return "normal";
+  }
+
+  return "normal";
+}
+
+function toScanFileLabel(filePath: string): string {
+  const segments = filePath.split(/[/\\]/);
+  return segments[segments.length - 1] || filePath;
+}
+
+function trackQueryCacheKey(rootId: string, search: string): string {
+  return `${rootId}::${search.trim().toLowerCase()}`;
 }
 
 class ResourceRequestError extends Error {
@@ -153,6 +185,7 @@ export function App() {
   const playbackIntentRef = useRef(false);
   const trackObjectUrlRef = useRef<string | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
+  const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
 
   const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
@@ -175,8 +208,9 @@ export function App() {
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
   const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("normal");
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() => readStoredPlaybackMode());
   const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
+  const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
 
   const deferredSearch = useDeferredValue(search);
 
@@ -261,6 +295,26 @@ export function App() {
     async function loadTracks(): Promise<void> {
       setIsLoadingLibrary(true);
       setLibraryError(null);
+      setLibraryMessage(`Loading ${selectedRootId ? "folder" : "library"}…`);
+
+      const queryKey = trackQueryCacheKey(selectedRootId, deferredSearch);
+      const cachedTracks = trackQueryCacheRef.current.get(queryKey);
+      if (cachedTracks) {
+        if (!ignore) {
+          startTransition(() => {
+            setLibraryTracks(cachedTracks);
+          });
+          if (roots.length === 0) {
+            setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
+          } else if (cachedTracks.length === 0) {
+            setLibraryMessage("No supported audio files were found in this view. Try another folder or a broader search.");
+          } else {
+            setLibraryMessage(`${cachedTracks.length} indexed tracks are in the current library scope.`);
+          }
+          setIsLoadingLibrary(false);
+        }
+        return;
+      }
 
       try {
         const nextTracks = await window.library.queryTracks({
@@ -276,6 +330,7 @@ export function App() {
         startTransition(() => {
           setLibraryTracks(nextTracks);
         });
+        trackQueryCacheRef.current.set(queryKey, nextTracks);
 
         if (roots.length === 0) {
           setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
@@ -301,6 +356,10 @@ export function App() {
       ignore = true;
     };
   }, [deferredSearch, reloadTick, roots.length, selectedRootId]);
+
+  useEffect(() => {
+    trackQueryCacheRef.current.clear();
+  }, [reloadTick]);
 
   const availabilityCounts = countAvailabilities(libraryTracks);
   const visibleTracks = filterTracks(libraryTracks, availabilityFilter);
@@ -399,6 +458,48 @@ export function App() {
       if (progress.phase === "error" && progress.message) {
         setLibraryError(progress.message);
       }
+
+      setScanModal((current) => {
+        if (!current || current.jobId !== progress.jobId) {
+          return current;
+        }
+
+        const nextFiles =
+          progress.currentFile && !current.files.includes(progress.currentFile)
+            ? [...current.files, progress.currentFile]
+            : current.files;
+
+        if (progress.phase === "completed") {
+          return {
+            ...current,
+            status: "completed",
+            processedFiles: progress.processedFiles,
+            discoveredFiles: progress.discoveredFiles,
+            message: progress.message ?? "Scan completed.",
+            files: nextFiles
+          };
+        }
+
+        if (progress.phase === "error") {
+          return {
+            ...current,
+            status: "error",
+            processedFiles: progress.processedFiles,
+            discoveredFiles: progress.discoveredFiles,
+            message: progress.message ?? "Scan failed.",
+            files: nextFiles
+          };
+        }
+
+        return {
+          ...current,
+          status: "scanning",
+          processedFiles: progress.processedFiles,
+          discoveredFiles: progress.discoveredFiles,
+          message: progress.message ?? current.message,
+          files: nextFiles
+        };
+      });
     });
 
     return unsubscribe;
@@ -497,6 +598,14 @@ export function App() {
   }, [volumePercent]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(PLAYBACK_MODE_STORAGE_KEY, playbackMode);
+    } catch {
+      // Ignore storage failures; runtime playback mode still works.
+    }
+  }, [playbackMode]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
@@ -511,6 +620,17 @@ export function App() {
       audio.removeEventListener("volumechange", handleVolumeChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (availabilityFilter === "missing" && availabilityCounts.missing === 0) {
+      setAvailabilityFilter("all");
+      return;
+    }
+
+    if (availabilityFilter === "offline" && availabilityCounts.offline === 0) {
+      setAvailabilityFilter("all");
+    }
+  }, [availabilityCounts.missing, availabilityCounts.offline, availabilityFilter]);
 
   function chooseRandomTrack(excludeTrackId: string | null): TrackListItem | null {
     if (visibleTracks.length === 0) {
@@ -737,7 +857,15 @@ export function App() {
 
       if (summary.addedRoots.length > 0) {
         setLibraryMessage(`Added ${summary.addedRoots.length} folder${summary.addedRoots.length === 1 ? "" : "s"}. Scanning now.`);
-        await window.library.rescan();
+        const jobId = await window.library.rescan();
+        setScanModal({
+          jobId,
+          status: "scanning",
+          processedFiles: 0,
+          discoveredFiles: 0,
+          message: "Scanning library…",
+          files: []
+        });
       } else if (summary.duplicatePaths.length > 0) {
         setLibraryMessage("Those folders are already in the library.");
       }
@@ -749,7 +877,15 @@ export function App() {
   async function handleRescan(): Promise<void> {
     try {
       setLibraryError(null);
-      await window.library.rescan();
+      const jobId = await window.library.rescan();
+      setScanModal({
+        jobId,
+        status: "scanning",
+        processedFiles: 0,
+        discoveredFiles: 0,
+        message: "Scanning library…",
+        files: []
+      });
       setLibraryMessage("Rescanning library…");
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Unable to rescan library");
@@ -766,6 +902,26 @@ export function App() {
       setReloadTick((value) => value + 1);
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Unable to remove library folder");
+    }
+  }
+
+  async function handleRemoveTrack(trackId: string): Promise<void> {
+    try {
+      setLibraryError(null);
+
+      const currentIndex = visibleTracks.findIndex((track) => track.id === trackId);
+      const fallbackTrackId =
+        visibleTracks[currentIndex + 1]?.id ??
+        visibleTracks[currentIndex - 1]?.id ??
+        null;
+
+      await window.library.removeTrack(trackId);
+
+      setSelectedTrackId((current) => (current === trackId ? fallbackTrackId : current));
+      setReloadTick((value) => value + 1);
+      setLibraryMessage("Removed missing track from the library.");
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Unable to remove missing track");
     }
   }
 
@@ -855,8 +1011,15 @@ export function App() {
   }
 
   function handleSelectRoot(rootId: string): void {
+    if (selectedRootId === rootId && activeView === "library") {
+      return;
+    }
     setSelectedRootId(rootId);
     setActiveView("library");
+  }
+
+  function handleAvailabilityFilterChange(filter: AvailabilityFilter): void {
+    setAvailabilityFilter((current) => (current === filter ? "all" : filter));
   }
 
   function handleOpenSettings(): void {
@@ -923,17 +1086,28 @@ export function App() {
 
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
+  const selectedMissingTrack = trackDetail?.availability === "missing"
+    ? trackDetail
+    : availabilityFilter === "missing"
+      ? visibleTracks.find((track) => track.availability === "missing") ?? null
+      : null;
 
   return (
     <div className="app-shell">
       <audio ref={audioRef} />
+      <ScanProgressModal
+        scan={scanModal}
+        onClose={() => setScanModal(null)}
+        toFileLabel={toScanFileLabel}
+      />
 
       <div className={`app-workspace ${isPlayerExpanded ? "expanded" : ""}`}>
         <NavigationRail
           activeView={activeView}
           roots={roots}
           selectedRootId={selectedRootId}
-          visibleTrackCount={visibleTracks.length}
+          trackCount={libraryTracks.length}
+          isLoadingLibrary={isLoadingLibrary}
           onSelectRoot={handleSelectRoot}
           onOpenSettings={handleOpenSettings}
         />
@@ -951,6 +1125,21 @@ export function App() {
           <main className={isPlayerExpanded ? "expanded-player-view" : isSettingsView ? "settings-main" : "library-view"}>
             {libraryError ? <div className="error-banner">{libraryError}</div> : null}
             {playbackError ? <div className="error-banner">{playbackError}</div> : null}
+            {!isPlayerExpanded && !isSettingsView && selectedMissingTrack ? (
+              <div className="action-banner">
+                <div>
+                  <strong>{selectedMissingTrack.title} is missing from disk.</strong>
+                  <span>Remove it from the library if you no longer want to track it.</span>
+                </div>
+                <button
+                  type="button"
+                  className="cta-button secondary"
+                  onClick={() => void handleRemoveTrack(selectedMissingTrack.id)}
+                >
+                  Remove Track
+                </button>
+              </div>
+            ) : null}
 
             {isPlayerExpanded ? (
               <ExpandedPlayer
@@ -981,7 +1170,7 @@ export function App() {
                   filterCounts={availabilityCounts}
                   activeFilter={availabilityFilter}
                   libraryMessage={libraryMessage}
-                  onFilterChange={setAvailabilityFilter}
+                  onFilterChange={handleAvailabilityFilterChange}
                 />
 
                 <TrackTable
@@ -989,6 +1178,7 @@ export function App() {
                   selectedTrackId={selectedTrackId}
                   hasRoots={roots.length > 0}
                   isLoading={isLoadingLibrary}
+                  showLoadingOverlay={isLoadingLibrary}
                   activeFilter={availabilityFilter}
                   onOpenSettings={handleOpenSettings}
                   onSelectTrack={setSelectedTrackId}

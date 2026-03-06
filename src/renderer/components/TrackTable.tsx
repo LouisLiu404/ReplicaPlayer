@@ -9,6 +9,7 @@ interface TrackTableProps {
   selectedTrackId: string | null;
   hasRoots: boolean;
   isLoading: boolean;
+  showLoadingOverlay: boolean;
   activeFilter: AvailabilityFilter;
   onOpenSettings: () => void;
   onSelectTrack: (trackId: string) => void;
@@ -20,11 +21,24 @@ export function TrackTable({
   selectedTrackId,
   hasRoots,
   isLoading,
+  showLoadingOverlay,
   activeFilter,
   onOpenSettings,
   onSelectTrack,
   onPlayTrack
 }: TrackTableProps) {
+  if (isLoading && tracks.length === 0) {
+    return (
+      <section className="loading-surface" aria-live="polite">
+        <div className="loading-spinner large" aria-hidden="true" />
+        <div className="loading-copy">
+          <strong>Loading tracks</strong>
+          <span>Fetching the selected folder playlist.</span>
+        </div>
+      </section>
+    );
+  }
+
   if (tracks.length === 0) {
     if (!hasRoots) {
       return (
@@ -44,7 +58,7 @@ export function TrackTable({
         description={isLoading
           ? "Scanning your current library selection."
           : activeFilter === "missing"
-            ? "No missing files are currently indexed in this view."
+            ? "No missing tracks are currently indexed in this view."
             : activeFilter === "offline"
               ? "No tracks from unavailable folders are in this view."
               : "Try a different folder scope, availability filter, or search term."}
@@ -55,6 +69,12 @@ export function TrackTable({
 
   return (
     <section className="track-table-shell" aria-label="Track list">
+      {showLoadingOverlay ? (
+        <div className="track-table-loading" aria-live="polite">
+          <div className="loading-spinner" aria-hidden="true" />
+          <span>Loading tracks…</span>
+        </div>
+      ) : null}
       <div className="track-table-header">
         <span>#</span>
         <span>Track</span>

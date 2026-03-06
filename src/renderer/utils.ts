@@ -14,7 +14,7 @@ export function formatNumber(value: number | null, suffix: string): string {
 export function availabilityLabel(value: TrackAvailability): string {
   switch (value) {
     case "available":
-      return "Ready";
+      return "On disk";
     case "offline":
       return "Unavailable";
     case "missing":

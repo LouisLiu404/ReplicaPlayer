@@ -240,6 +240,11 @@ export class LibraryRepository {
     statement.run(rootId);
   }
 
+  deleteTrack(trackId: string): void {
+    const statement = this.db.prepare(`DELETE FROM tracks WHERE id = ?`);
+    statement.run(trackId);
+  }
+
   markRoot(rootId: string, status: LibraryRootStatus, lastError: string | null, lastScanAt: string | null): void {
     const statement = this.db.prepare(`
       UPDATE library_roots

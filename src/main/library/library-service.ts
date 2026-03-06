@@ -66,6 +66,10 @@ export class LibraryService extends EventEmitter {
     await this.call("removeRoot", rootId);
   }
 
+  async removeTrack(trackId: string): Promise<void> {
+    await this.call("removeTrack", trackId);
+  }
+
   async rescan(): Promise<ScanJobId> {
     return this.call("rescan") as Promise<ScanJobId>;
   }

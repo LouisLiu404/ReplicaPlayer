@@ -37,6 +37,10 @@ class WorkerApplication {
     this.getRepository().deleteRoot(rootId);
   }
 
+  async removeTrack(trackId: string): Promise<void> {
+    this.getRepository().deleteTrack(trackId);
+  }
+
   async rescan(): Promise<string> {
     const jobId = randomUUID();
     const scanner = this.getScanner();
@@ -169,6 +173,9 @@ async function handleMessage(message: WorkerCallMessage): Promise<void> {
         break;
       case "removeRoot":
         result = await worker.removeRoot(String(message.args[0]));
+        break;
+      case "removeTrack":
+        result = await worker.removeTrack(String(message.args[0]));
         break;
       case "rescan":
         result = await worker.rescan();

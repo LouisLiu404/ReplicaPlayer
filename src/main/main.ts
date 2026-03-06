@@ -62,9 +62,15 @@ function normalizeQuery(value: unknown): TrackQuery {
 async function createMainWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1500,
-    height: 940,
-    minWidth: 1180,
-    minHeight: 760,
+    height: 800,
+    minWidth: 1500,
+    minHeight: 800,
+    maxWidth: 1500,
+    maxHeight: 800,
+    resizable: false,
+    movable: true,
+    maximizable: false,
+    fullscreenable: false,
     show: false,
     backgroundColor: "#0f1620",
     titleBarStyle: "hiddenInset",
@@ -104,6 +110,10 @@ function registerIpcHandlers(library: LibraryService): void {
 
   ipcMain.handle("library:remove-root", async (_event, payload) => {
     await library.removeRoot(requireString(payload, "rootId"));
+  });
+
+  ipcMain.handle("library:remove-track", async (_event, payload) => {
+    await library.removeTrack(requireString(payload, "trackId"));
   });
 
   ipcMain.handle("library:rescan", async () => {
