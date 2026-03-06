@@ -28,7 +28,12 @@ Replica Player is a macOS-only Electron music player for local files. It indexes
 - Manual rescan flow with a modal progress view that lists scanned file names in order.
 - Cached folder-playlist queries and explicit loading states for faster folder switching.
 - Missing-track cleanup prompt so deleted files can be removed from the library index.
-- Fixed-size desktop window tuned for the current macOS layout.
+- Fixed-size movable desktop window tuned for the current macOS layout.
+- Three playback modes with persistence across restarts:
+  - repeat current folder scope
+  - repeat current track
+  - shuffle
+- Footer progress scrubbing uses the full top edge of the player bar instead of a separate center slider.
 - Sandboxed renderer with preload-only IPC and custom protocols instead of direct `file://` access.
 
 ## Stack
@@ -36,6 +41,7 @@ Replica Player is a macOS-only Electron music player for local files. It indexes
 - Electron 40
 - Electron Forge + webpack
 - React 19 + TypeScript
+- Heroicons
 - `music-metadata`
 - `node:sqlite`
 
@@ -91,6 +97,13 @@ npm run make
 4. The renderer queries the indexed library over preload IPC.
 5. Playback and artwork are served through a privileged custom protocol and converted to `blob:` URLs in the renderer.
 
+## Playback Controls
+
+- Double-click a track row to start playback immediately.
+- Click the cover art or the chevron in the footer to open the expanded player.
+- The footer mode button cycles `repeat scope -> repeat track -> shuffle`.
+- Volume defaults to `100%` and is restored across launches.
+
 ## Lyrics Priority
 
 Lyrics are resolved in this order:
@@ -127,6 +140,15 @@ The app indexes files in place. It does not copy music into an app-managed media
 - Folder playlist queries are cached between rescans, so switching back to an already-opened folder scope is immediate.
 - Search input uses deferred updates to avoid blocking the renderer on rapid typing.
 - When a query still takes time, the app shows explicit loading UI instead of leaving the track list looking unresponsive.
+
+## Tests
+
+The test suite includes regression coverage for:
+
+- synced/external lyric parsing precedence
+- fixed-size but movable main-window options
+- persisted playback-mode defaults and cycling
+- sidebar folder-scope loading copy and click behavior
 
 ## Project Layout
 

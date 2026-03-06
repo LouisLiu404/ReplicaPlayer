@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
 import type { TrackQuery } from "../shared/types";
 import { LibraryService } from "./library/library-service";
 import { registerProtocols } from "./protocols";
+import { getMainWindowOptions } from "./window-options";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -60,27 +61,7 @@ function normalizeQuery(value: unknown): TrackQuery {
 }
 
 async function createMainWindow(): Promise<void> {
-  mainWindow = new BrowserWindow({
-    width: 1500,
-    height: 800,
-    minWidth: 1500,
-    minHeight: 800,
-    maxWidth: 1500,
-    maxHeight: 800,
-    resizable: false,
-    movable: true,
-    maximizable: false,
-    fullscreenable: false,
-    show: false,
-    backgroundColor: "#0f1620",
-    titleBarStyle: "hiddenInset",
-    webPreferences: {
-      preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false
-    }
-  });
+  mainWindow = new BrowserWindow(getMainWindowOptions(MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY));
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();

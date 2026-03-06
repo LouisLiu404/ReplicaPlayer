@@ -1,13 +1,12 @@
 import type { LibraryRoot } from "../../shared/types";
 import type { AppView } from "./ui-types";
-import { PlayerGlyph, SettingsIcon } from "./icons";
+import { PlayerGlyph, ReplicaWordmark, SettingsIcon } from "./icons";
 
 interface NavigationRailProps {
   activeView: AppView;
   roots: LibraryRoot[];
   selectedRootId: string;
-  trackCount: number;
-  isLoadingLibrary: boolean;
+  allFoldersTrackCount: number | null;
   onSelectRoot: (rootId: string) => void;
   onOpenSettings: () => void;
 }
@@ -16,20 +15,20 @@ export function NavigationRail({
   activeView,
   roots,
   selectedRootId,
-  trackCount,
-  isLoadingLibrary,
+  allFoldersTrackCount,
   onSelectRoot,
   onOpenSettings
 }: NavigationRailProps) {
-  const allFoldersCopy = isLoadingLibrary
-    ? "Loading…"
-    : `${trackCount} ${trackCount === 1 ? "track" : "tracks"}`;
+  const allFoldersCopy =
+    allFoldersTrackCount == null
+      ? "Loading…"
+      : `${allFoldersTrackCount} ${allFoldersTrackCount === 1 ? "track" : "tracks"}`;
 
   return (
     <aside className="navigation-rail">
       <div className="rail-topmark" aria-hidden="true">
         <PlayerGlyph className="rail-topmark-icon" />
-        <span className="rail-topmark-label">Replica</span>
+        <ReplicaWordmark className="rail-topmark-wordmark" />
       </div>
 
       <div className="rail-roots">

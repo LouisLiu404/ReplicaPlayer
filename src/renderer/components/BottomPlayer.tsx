@@ -1,4 +1,7 @@
+import type { CSSProperties } from "react";
+
 import type { TrackDetail } from "../../shared/types";
+import type { PlaybackMode } from "../playback";
 import { formatDuration } from "../utils";
 import {
   ChevronDownIcon,
@@ -12,8 +15,6 @@ import {
   ShuffleIcon,
   VolumeIcon
 } from "./icons";
-
-type PlaybackMode = "normal" | "shuffle" | "repeat-all" | "repeat-one";
 
 interface BottomPlayerProps {
   track: TrackDetail | null;
@@ -55,6 +56,7 @@ export function BottomPlayer({
   onTogglePanel
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
+  const progressPercent = track ? Math.min(Math.max(currentTimeMs / totalDuration, 0), 1) : 0;
   const metaLine = track
     ? track.artist || track.album || "Unknown artist"
     : "Choose a track from the library.";
@@ -65,10 +67,26 @@ export function BottomPlayer({
         ? "Repeat current scope"
         : playbackMode === "repeat-one"
           ? "Repeat current track"
-          : "Playback mode off";
+          : "Shuffle";
 
   return (
-    <footer className="bottom-player">
+    <footer
+      className="bottom-player"
+      style={{ "--player-progress": `${progressPercent * 100}%` } as CSSProperties}
+    >
+      <div className="bottom-player-progress-shell">
+        <input
+          type="range"
+          className="bottom-player-progress"
+          min={0}
+          max={totalDuration}
+          value={Math.min(currentTimeMs, totalDuration)}
+          onChange={(event) => onSeek(Number.parseInt(event.target.value, 10))}
+          disabled={!track}
+          aria-label="Seek"
+        />
+      </div>
+
       <div className="bottom-player-current">
         <button
           type="button"
@@ -113,7 +131,7 @@ export function BottomPlayer({
           </button>
           <button
             type="button"
-            className={`transport-mode-button ${playbackMode !== "normal" ? "active" : ""}`}
+            className="transport-mode-button active"
             onClick={onCyclePlaybackMode}
             aria-label={modeLabel}
             title={modeLabel}
@@ -123,17 +141,8 @@ export function BottomPlayer({
           </button>
         </div>
 
-        <div className="player-timeline">
+        <div className="player-time-row" aria-hidden={!track}>
           <span>{formatDuration(currentTimeMs)}</span>
-          <input
-            type="range"
-            min={0}
-            max={totalDuration}
-            value={Math.min(currentTimeMs, totalDuration)}
-            onChange={(event) => onSeek(Number.parseInt(event.target.value, 10))}
-            disabled={!track}
-            aria-label="Seek"
-          />
           <span>{formatDuration(track ? totalDuration : 0)}</span>
         </div>
       </div>

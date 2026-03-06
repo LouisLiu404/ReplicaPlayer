@@ -161,21 +161,21 @@ img {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 26px 0 4px 2px;
+  gap: 14px;
+  padding: 22px 0 6px 2px;
 }
 
 .rail-topmark-icon {
-  width: 54px;
-  height: 54px;
+  width: 68px;
+  height: 68px;
   flex-shrink: 0;
 }
 
-.rail-topmark-label {
-  font-size: 1.55rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text-primary);
+.rail-topmark-wordmark {
+  width: 170px;
+  height: 54px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .rail-roots {
@@ -1647,11 +1647,98 @@ img {
   bottom: 0;
   z-index: 24;
   height: var(--player-height);
-  padding: 16px 24px 16px 22px;
-  border-top: 1px solid var(--divider);
+  padding: 24px 24px 16px 22px;
   background: linear-gradient(180deg, rgba(16, 16, 18, 0.95), rgba(10, 10, 12, 0.98));
   backdrop-filter: blur(16px);
   box-shadow: 0 -14px 32px rgba(0, 0, 0, 0.34);
+  --player-progress: 0%;
+}
+
+.bottom-player-progress-shell {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 18px;
+  display: flex;
+  align-items: flex-start;
+  z-index: 1;
+}
+
+.bottom-player-progress {
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bottom-player-progress:disabled {
+  cursor: default;
+}
+
+.bottom-player-progress::-webkit-slider-runnable-track {
+  height: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.94) 0,
+    rgba(255, 255, 255, 0.94) var(--player-progress),
+    rgba(255, 255, 255, 0.2) var(--player-progress),
+    rgba(255, 255, 255, 0.2) 100%
+  );
+}
+
+.bottom-player-progress::-moz-range-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.bottom-player-progress::-moz-range-progress {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.bottom-player-progress::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transform: scale(0.65);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.bottom-player-progress::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transform: scale(0.65);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.bottom-player-progress-shell:hover .bottom-player-progress::-webkit-slider-thumb,
+.bottom-player-progress:focus-visible::-webkit-slider-thumb,
+.bottom-player-progress:active::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.bottom-player-progress-shell:hover .bottom-player-progress::-moz-range-thumb,
+.bottom-player-progress:focus-visible::-moz-range-thumb,
+.bottom-player-progress:active::-moz-range-thumb {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .bottom-player-current,
@@ -1698,10 +1785,8 @@ img {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-self: stretch;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
-  transform: translateY(-2px);
 }
 
 .bottom-player-copy strong,
@@ -1724,7 +1809,7 @@ img {
 .bottom-player-center {
   display: grid;
   justify-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .transport-row {
@@ -1770,42 +1855,40 @@ img {
 
 .transport-icon-button svg,
 .transport-mode-button svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
 }
 
 .transport-play-button svg {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
 }
 
 .transport-mode-badge {
   position: absolute;
-  right: 6px;
-  bottom: 5px;
-  min-width: 14px;
-  height: 14px;
+  right: 5px;
+  bottom: 4px;
+  min-width: 15px;
+  height: 15px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(8, 8, 10, 0.78);
-  font-size: 0.62rem;
+  background: rgba(8, 8, 10, 0.88);
+  font-size: 0.64rem;
   font-weight: 700;
   line-height: 1;
 }
 
-.player-timeline {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+.player-time-row {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
+  justify-content: space-between;
+  width: min(100%, 620px);
   color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
-.player-timeline input,
 .volume-control input {
   width: 100%;
 }
@@ -1870,14 +1953,14 @@ img {
   height: 18px;
 }
 
-input[type="range"] {
+input[type="range"]:not(.bottom-player-progress) {
   appearance: none;
   height: 4px;
   background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
 }
 
-input[type="range"]::-webkit-slider-thumb {
+input[type="range"]:not(.bottom-player-progress)::-webkit-slider-thumb {
   appearance: none;
   width: 14px;
   height: 14px;
@@ -1886,7 +1969,7 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
 }
 
-input[type="range"]::-moz-range-thumb {
+input[type="range"]:not(.bottom-player-progress)::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border: 0;
@@ -1914,6 +1997,15 @@ input[type="range"]::-moz-range-thumb {
 
   .navigation-rail {
     padding-inline: 14px;
+  }
+
+  .rail-topmark {
+    justify-content: center;
+    padding-left: 0;
+  }
+
+  .rail-topmark-wordmark {
+    display: none;
   }
 
   .rail-root-card small,
@@ -1977,7 +2069,8 @@ input[type="range"]::-moz-range-thumb {
   .bottom-player {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
-    padding-block: 14px;
+    padding-top: 22px;
+    padding-bottom: 14px;
   }
 
   .bottom-player-trailing {

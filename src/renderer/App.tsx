@@ -23,6 +23,12 @@ import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
+import {
+  cyclePlaybackMode,
+  PLAYBACK_MODE_STORAGE_KEY,
+  readStoredPlaybackMode,
+  type PlaybackMode
+} from "./playback";
 
 type AvailabilityCounts = {
   all: number;
@@ -31,7 +37,6 @@ type AvailabilityCounts = {
   offline: number;
 };
 
-type PlaybackMode = "normal" | "shuffle" | "repeat-all" | "repeat-one";
 type ManualScanModalState = {
   jobId: string;
   status: "scanning" | "completed" | "error";
@@ -42,7 +47,6 @@ type ManualScanModalState = {
 };
 
 const VOLUME_STORAGE_KEY = "replica-player:volume-percent";
-const PLAYBACK_MODE_STORAGE_KEY = "replica-player:playback-mode";
 
 function readStoredVolume(): number {
   try {
@@ -60,19 +64,6 @@ function readStoredVolume(): number {
   } catch {
     return 100;
   }
-}
-
-function readStoredPlaybackMode(): PlaybackMode {
-  try {
-    const raw = window.localStorage.getItem(PLAYBACK_MODE_STORAGE_KEY);
-    if (raw === "shuffle" || raw === "repeat-all" || raw === "repeat-one" || raw === "normal") {
-      return raw;
-    }
-  } catch {
-    return "normal";
-  }
-
-  return "normal";
 }
 
 function toScanFileLabel(filePath: string): string {
@@ -194,6 +185,7 @@ export function App() {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
   const [lyrics, setLyrics] = useState<LyricPayload>({ mode: "none", source: "none" });
+  const [allFoldersTrackCount, setAllFoldersTrackCount] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
@@ -208,7 +200,9 @@ export function App() {
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
   const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() => readStoredPlaybackMode());
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() =>
+    readStoredPlaybackMode(window.localStorage)
+  );
   const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
   const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
 
@@ -304,6 +298,9 @@ export function App() {
           startTransition(() => {
             setLibraryTracks(cachedTracks);
           });
+          if (!selectedRootId && deferredSearch.trim().length === 0) {
+            setAllFoldersTrackCount(cachedTracks.length);
+          }
           if (roots.length === 0) {
             setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
           } else if (cachedTracks.length === 0) {
@@ -331,6 +328,9 @@ export function App() {
           setLibraryTracks(nextTracks);
         });
         trackQueryCacheRef.current.set(queryKey, nextTracks);
+        if (!selectedRootId && deferredSearch.trim().length === 0) {
+          setAllFoldersTrackCount(nextTracks.length);
+        }
 
         if (roots.length === 0) {
           setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
@@ -1035,18 +1035,7 @@ export function App() {
   }
 
   function handleCyclePlaybackMode(): void {
-    setPlaybackMode((current) => {
-      switch (current) {
-        case "normal":
-          return "shuffle";
-        case "shuffle":
-          return "repeat-all";
-        case "repeat-all":
-          return "repeat-one";
-        case "repeat-one":
-          return "normal";
-      }
-    });
+    setPlaybackMode((current) => cyclePlaybackMode(current));
   }
 
   function handleVolumeChange(nextVolumePercent: number): void {
@@ -1106,8 +1095,7 @@ export function App() {
           activeView={activeView}
           roots={roots}
           selectedRootId={selectedRootId}
-          trackCount={libraryTracks.length}
-          isLoadingLibrary={isLoadingLibrary}
+          allFoldersTrackCount={allFoldersTrackCount}
           onSelectRoot={handleSelectRoot}
           onOpenSettings={handleOpenSettings}
         />
@@ -1201,7 +1189,11 @@ export function App() {
         volumePercent={volumePercent}
         canStepPrev={
           playbackPositionMs >= 3000 ||
-          (playbackMode === "shuffle" ? visibleTracks.length > 1 : playbackMode === "repeat-all" ? visibleTracks.length > 0 : selectedTrackIndex > 0)
+          (playbackMode === "shuffle"
+            ? visibleTracks.length > 1
+            : playbackMode === "repeat-all"
+              ? visibleTracks.length > 0
+              : selectedTrackIndex > 0)
         }
         canStepNext={
           playbackMode === "shuffle"
