@@ -140,11 +140,6 @@ export function BottomPlayer({
             {playbackMode === "repeat-one" ? <span className="transport-mode-badge">1</span> : null}
           </button>
         </div>
-
-        <div className="player-time-row" aria-hidden={!track}>
-          <span>{formatDuration(currentTimeMs)}</span>
-          <span>{formatDuration(track ? totalDuration : 0)}</span>
-        </div>
       </div>
 
       <div className="bottom-player-trailing">
@@ -175,6 +170,11 @@ export function BottomPlayer({
         >
           {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
         </button>
+      </div>
+
+      <div className="player-time-row" aria-hidden={!track}>
+        <span>{formatDuration(currentTimeMs)}</span>
+        <span>{formatDuration(track ? totalDuration : 0)}</span>
       </div>
     </footer>
   );

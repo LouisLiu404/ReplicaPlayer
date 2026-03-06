@@ -29,6 +29,15 @@ const TABS: Array<{ id: ActivePanelTab; label: string }> = [
   { id: "details", label: "Details" }
 ];
 
+function splitLyricParts(text: string): string[] {
+  const parts = text
+    .split(/\r?\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.length > 0 ? parts : ["…"];
+}
+
 export function ExpandedPlayer({
   activeTab,
   selectedTrackId,
@@ -175,9 +184,16 @@ export function ExpandedPlayer({
                         ref={(element) => {
                           setLyricRef(index, element);
                         }}
-                        className={`lyric-line ${activeLyricLine === index ? "active" : ""}`}
+                        className={`lyric-line-group ${activeLyricLine === index ? "active" : ""}`}
                       >
-                        {line.text || "…"}
+                        {splitLyricParts(line.text).map((part, partIndex) => (
+                          <div
+                            key={`${line.startMs}-${index}-${partIndex}`}
+                            className={`lyric-line ${partIndex === 0 ? "primary" : "secondary"}`}
+                          >
+                            {part}
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>

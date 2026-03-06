@@ -103,45 +103,47 @@ export function ReplicaWordmark(props: IconProps) {
         </clipPath>
       </defs>
 
-      <g clipPath={`url(#${bottomSliceId})`}>
-        <text
-          x="315"
-          y="135"
-          fill={`url(#${orangeGradId})`}
-          fontFamily="'Arial Black', Impact, system-ui, sans-serif"
-          fontSize="85"
-          fontWeight="900"
-          letterSpacing="14"
-          textAnchor="middle"
-        >
-          REPLICA
-        </text>
-      </g>
+      <g transform="translate(-24 0)">
+        <g clipPath={`url(#${bottomSliceId})`}>
+          <text
+            x="315"
+            y="135"
+            fill={`url(#${orangeGradId})`}
+            fontFamily="'Arial Black', Impact, system-ui, sans-serif"
+            fontSize="85"
+            fontWeight="900"
+            letterSpacing="14"
+            textAnchor="middle"
+          >
+            REPLICA
+          </text>
+        </g>
 
-      <g clipPath={`url(#${topSliceId})`}>
-        <text
-          x="300"
-          y="135"
-          fill="#ffffff"
-          fontFamily="'Arial Black', Impact, system-ui, sans-serif"
-          fontSize="85"
-          fontWeight="900"
-          letterSpacing="14"
-          textAnchor="middle"
-        >
-          REPLICA
-        </text>
-      </g>
+        <g clipPath={`url(#${topSliceId})`}>
+          <text
+            x="300"
+            y="135"
+            fill="#ffffff"
+            fontFamily="'Arial Black', Impact, system-ui, sans-serif"
+            fontSize="85"
+            fontWeight="900"
+            letterSpacing="14"
+            textAnchor="middle"
+          >
+            REPLICA
+          </text>
+        </g>
 
-      <line
-        x1="80"
-        y1="100"
-        x2="520"
-        y2="100"
-        stroke={`url(#${orangeGradId})`}
-        strokeWidth="2"
-        opacity="0.8"
-      />
+        <line
+          x1="80"
+          y1="100"
+          x2="520"
+          y2="100"
+          stroke={`url(#${orangeGradId})`}
+          strokeWidth="2"
+          opacity="0.8"
+        />
+      </g>
     </svg>
   );
 }
