@@ -1,21 +1,18 @@
 import type { RefObject } from "react";
 
-import type { LibraryRoot } from "../../shared/types";
-import { PanelIcon, PlusIcon, RefreshIcon, SearchIcon } from "./icons";
+import type { LibraryRoot, ScanProgress } from "../../shared/types";
+import { PlusIcon, RefreshIcon, SearchIcon } from "./icons";
 
 interface TopBarProps {
   roots: LibraryRoot[];
   search: string;
   selectedRootId: string;
   searchInputRef: RefObject<HTMLInputElement | null>;
-  statusLabel: string;
-  statusTone: "idle" | "active" | "success" | "error";
-  statusDetail: string;
+  scanProgress: ScanProgress | null;
   onSearchChange: (value: string) => void;
   onSelectRoot: (value: string) => void;
   onAddRoots: () => void;
   onRescan: () => void;
-  onTogglePanel: () => void;
 }
 
 export function TopBar({
@@ -23,15 +20,20 @@ export function TopBar({
   search,
   selectedRootId,
   searchInputRef,
-  statusLabel,
-  statusTone,
-  statusDetail,
+  scanProgress,
   onSearchChange,
   onSelectRoot,
   onAddRoots,
-  onRescan,
-  onTogglePanel
+  onRescan
 }: TopBarProps) {
+  const isScanActive =
+    scanProgress?.phase === "queued" ||
+    scanProgress?.phase === "scanning-root" ||
+    scanProgress?.phase === "parsing-file";
+  const progressRatio = scanProgress && scanProgress.discoveredFiles > 0
+    ? Math.min(scanProgress.processedFiles / scanProgress.discoveredFiles, 1)
+    : 0.08;
+
   return (
     <header className="top-bar">
       <div className="top-bar-leading">
@@ -60,17 +62,18 @@ export function TopBar({
       </div>
 
       <div className="top-bar-trailing">
-        <div className={`status-pill tone-${statusTone}`}>
-          <span className="status-pill-dot" />
-          <div className="status-pill-copy">
-            <strong>{statusLabel}</strong>
-            <span>{statusDetail}</span>
+        {isScanActive ? (
+          <div className="scan-pill" aria-label="Library scan progress">
+            <div className="scan-pill-copy">
+              <strong>{scanProgress.phase === "queued" ? "Queued" : "Scanning library"}</strong>
+              <span>{`${scanProgress.processedFiles} / ${scanProgress.discoveredFiles || "?"} files`}</span>
+            </div>
+            <div className="scan-pill-track" aria-hidden="true">
+              <div className="scan-pill-fill" style={{ width: `${Math.max(progressRatio * 100, 8)}%` }} />
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <button type="button" className="top-icon-button panel-toggle-button" onClick={onTogglePanel} aria-label="Toggle side panel">
-          <PanelIcon />
-        </button>
         <button type="button" className="cta-button" onClick={onAddRoots}>
           <PlusIcon />
           <span>Add Folders</span>

@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 
 import type { LibraryRoot } from "../../shared/types";
-import { DiscIcon, FolderIcon, LibraryIcon, ReplicaMark } from "./icons";
+import { FolderIcon, LibraryIcon, ReplicaMark } from "./icons";
 
 interface NavigationRailProps {
   roots: LibraryRoot[];
@@ -11,7 +11,6 @@ interface NavigationRailProps {
   onSelectRoot: (rootId: string) => void;
   onRemoveRoot: (rootId: string) => void;
   onJumpToFolders: () => void;
-  onOpenNowPlaying: () => void;
 }
 
 export function NavigationRail({
@@ -21,8 +20,7 @@ export function NavigationRail({
   rootSectionRef,
   onSelectRoot,
   onRemoveRoot,
-  onJumpToFolders,
-  onOpenNowPlaying
+  onJumpToFolders
 }: NavigationRailProps) {
   return (
     <aside className="navigation-rail">
@@ -42,10 +40,6 @@ export function NavigationRail({
         <button type="button" className="rail-nav-button" onClick={onJumpToFolders}>
           <FolderIcon className="rail-nav-icon" />
           <span>Folders</span>
-        </button>
-        <button type="button" className="rail-nav-button" onClick={onOpenNowPlaying}>
-          <DiscIcon className="rail-nav-icon" />
-          <span>Now Playing</span>
         </button>
       </nav>
 
@@ -79,7 +73,7 @@ export function NavigationRail({
                   title={root.path}
                 >
                   <strong>{root.displayName}</strong>
-                  <small>{root.status === "available" ? "Available" : "Offline"}</small>
+                  <small>{root.status === "available" ? "Available" : "Unavailable"}</small>
                 </button>
                 <button
                   type="button"

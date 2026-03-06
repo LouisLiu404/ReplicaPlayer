@@ -79,7 +79,31 @@ class WorkerApplication {
   }
 
   async resolveTrackPath(trackId: string): Promise<string | null> {
-    return this.getRepository().resolveTrackPath(trackId);
+    const repository = this.getRepository();
+    const track = repository.getTrack(trackId);
+    if (!track || track.availability !== "available") {
+      return null;
+    }
+
+    try {
+      await fs.access(track.path);
+      return track.path;
+    } catch {
+      const root = repository.getRoot(track.rootId);
+      if (root) {
+        try {
+          await fs.access(root.path);
+          repository.setTrackAvailability(trackId, "missing");
+        } catch {
+          repository.markRoot(root.id, "offline", "Saved folder is unavailable", new Date().toISOString());
+          repository.setTrackAvailabilityForRoot(root.id, "offline");
+        }
+      } else {
+        repository.setTrackAvailability(trackId, "missing");
+      }
+
+      return null;
+    }
   }
 
   async resolveArtworkPath(artworkKey: string): Promise<string | null> {

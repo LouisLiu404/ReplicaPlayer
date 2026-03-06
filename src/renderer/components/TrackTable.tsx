@@ -2,12 +2,14 @@ import type { TrackListItem } from "../../shared/types";
 import { availabilityLabel, formatDuration } from "../utils";
 import { EmptyState } from "./EmptyState";
 import { MusicNoteIcon } from "./icons";
+import type { AvailabilityFilter } from "./ui-types";
 
 interface TrackTableProps {
   tracks: TrackListItem[];
   selectedTrackId: string | null;
   hasRoots: boolean;
   isLoading: boolean;
+  activeFilter: AvailabilityFilter;
   onAddRoots: () => void;
   onSelectTrack: (trackId: string) => void;
 }
@@ -17,6 +19,7 @@ export function TrackTable({
   selectedTrackId,
   hasRoots,
   isLoading,
+  activeFilter,
   onAddRoots,
   onSelectTrack
 }: TrackTableProps) {
@@ -38,7 +41,11 @@ export function TrackTable({
         title={isLoading ? "Loading library" : "Nothing matches this view"}
         description={isLoading
           ? "Scanning your current library selection."
-          : "Try a different folder scope, availability filter, or search term."}
+          : activeFilter === "missing"
+            ? "No missing files are currently indexed in this view."
+            : activeFilter === "offline"
+              ? "No tracks from unavailable folders are in this view."
+              : "Try a different folder scope, availability filter, or search term."}
         icon={<MusicNoteIcon className="empty-state-glyph" />}
       />
     );
@@ -69,7 +76,13 @@ export function TrackTable({
             <div className="track-primary-cell">
               <div className="track-artwork">
                 {track.artworkUrl ? (
-                  <img src={track.artworkUrl} alt="" className="track-artwork-image" />
+                  <img
+                    src={track.artworkUrl}
+                    alt=""
+                    className="track-artwork-image"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 ) : (
                   <div className="track-artwork-fallback">
                     <MusicNoteIcon className="track-artwork-glyph" />

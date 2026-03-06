@@ -16,9 +16,20 @@ export function availabilityLabel(value: TrackAvailability): string {
     case "available":
       return "Ready";
     case "offline":
-      return "Offline";
+      return "Unavailable";
     case "missing":
       return "Missing";
+  }
+}
+
+export function availabilityDescription(value: TrackAvailability): string {
+  switch (value) {
+    case "available":
+      return "Available on disk";
+    case "offline":
+      return "Saved folder unavailable";
+    case "missing":
+      return "File missing from disk";
   }
 }
 

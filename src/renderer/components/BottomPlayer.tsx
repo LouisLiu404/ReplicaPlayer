@@ -1,10 +1,21 @@
 import type { TrackDetail } from "../../shared/types";
 import { formatDuration } from "../utils";
-import { DiscIcon, MusicNoteIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, VolumeIcon } from "./icons";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DiscIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  PrevIcon,
+  VolumeIcon
+} from "./icons";
 
 interface BottomPlayerProps {
   track: TrackDetail | null;
   isPlaying: boolean;
+  isExpanded: boolean;
+  canPlay: boolean;
   currentTimeMs: number;
   durationMs: number;
   volumePercent: number;
@@ -15,11 +26,14 @@ interface BottomPlayerProps {
   onTogglePlay: () => void;
   onSeek: (nextPositionMs: number) => void;
   onVolumeChange: (nextVolumePercent: number) => void;
+  onTogglePanel: () => void;
 }
 
 export function BottomPlayer({
   track,
   isPlaying,
+  isExpanded,
+  canPlay,
   currentTimeMs,
   durationMs,
   volumePercent,
@@ -29,7 +43,8 @@ export function BottomPlayer({
   onStepNext,
   onTogglePlay,
   onSeek,
-  onVolumeChange
+  onVolumeChange,
+  onTogglePanel
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
 
@@ -61,7 +76,7 @@ export function BottomPlayer({
             type="button"
             className="transport-play-button"
             onClick={onTogglePlay}
-            disabled={!track}
+            disabled={!track || !canPlay}
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -103,6 +118,17 @@ export function BottomPlayer({
           <span>{track?.format ?? "Local Library"}</span>
           <strong>{track ? formatDuration(totalDuration) : "0:00"}</strong>
         </div>
+
+        <button
+          type="button"
+          className="panel-expand-button"
+          onClick={onTogglePanel}
+          disabled={!track}
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
+        >
+          {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
+        </button>
       </div>
     </footer>
   );

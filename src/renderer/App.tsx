@@ -2,6 +2,7 @@ import {
   startTransition,
   useDeferredValue,
   useEffect,
+  useEffectEvent,
   useRef,
   useState
 } from "react";
@@ -14,13 +15,13 @@ import type {
   TrackListItem
 } from "../shared/types";
 import { BottomPlayer } from "./components/BottomPlayer";
-import { ContextPanel } from "./components/ContextPanel";
+import { ExpandedPlayer } from "./components/ExpandedPlayer";
 import { LibraryHero } from "./components/LibraryHero";
 import { NavigationRail } from "./components/NavigationRail";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AvailabilityFilter } from "./components/ui-types";
-import { scanPhaseLabel, scanPhaseTone } from "./utils";
+import { availabilityDescription } from "./utils";
 
 type AvailabilityCounts = {
   all: number;
@@ -28,6 +29,12 @@ type AvailabilityCounts = {
   missing: number;
   offline: number;
 };
+
+class ResourceRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`Resource request failed with status ${status}`);
+  }
+}
 
 function playbackErrorMessage(format: string): string {
   if (format === "Ogg") {
@@ -37,12 +44,35 @@ function playbackErrorMessage(format: string): string {
   return "This track could not be played.";
 }
 
-function playbackRejectionMessage(format: string, error: unknown): string {
+function unavailableTrackMessage(track: TrackDetail | null): string {
+  if (!track) {
+    return "This track could not be played.";
+  }
+
+  switch (track.availability) {
+    case "missing":
+      return "This file is missing from disk. Run Rescan to refresh the library.";
+    case "offline":
+      return "This track is in a saved folder that is currently unavailable.";
+    case "available":
+      return playbackErrorMessage(track.format);
+  }
+}
+
+function playbackRejectionMessage(track: TrackDetail | null, error: unknown): string {
   if (error instanceof DOMException && error.name === "NotAllowedError") {
     return "Playback is blocked until you press Play.";
   }
 
-  return playbackErrorMessage(format);
+  if (error instanceof ResourceRequestError && error.status === 404) {
+    if (track?.availability === "offline") {
+      return unavailableTrackMessage(track);
+    }
+
+    return "This file is no longer available. Run Rescan to refresh the library.";
+  }
+
+  return unavailableTrackMessage(track);
 }
 
 function currentLyricIndex(lyrics: LyricPayload, positionMs: number): number {
@@ -122,8 +152,7 @@ export function App() {
   const [durationMs, setDurationMs] = useState(0);
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
   const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
-  const [isPanelOverlay, setIsPanelOverlay] = useState(() => window.matchMedia("(max-width: 1380px)").matches);
-  const [panelDrawerOpen, setPanelDrawerOpen] = useState(false);
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [volumePercent, setVolumePercent] = useState(78);
 
   const deferredSearch = useDeferredValue(search);
@@ -140,31 +169,12 @@ export function App() {
   async function loadObjectUrl(resourceUrl: string, signal: AbortSignal): Promise<string> {
     const response = await fetch(resourceUrl, { signal });
     if (!response.ok) {
-      throw new Error(`Resource request failed with status ${response.status}`);
+      throw new ResourceRequestError(response.status);
     }
 
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 1380px)");
-
-    const syncOverlayState = (event?: MediaQueryListEvent) => {
-      const matches = event?.matches ?? mediaQuery.matches;
-      setIsPanelOverlay(matches);
-      if (!matches) {
-        setPanelDrawerOpen(false);
-      }
-    };
-
-    syncOverlayState();
-    mediaQuery.addEventListener("change", syncOverlayState);
-
-    return () => {
-      mediaQuery.removeEventListener("change", syncOverlayState);
-    };
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -183,8 +193,8 @@ export function App() {
         searchInputRef.current?.select();
       }
 
-      if (event.key === "Escape" && panelDrawerOpen && isPanelOverlay) {
-        setPanelDrawerOpen(false);
+      if (event.key === "Escape" && isPlayerExpanded) {
+        setIsPlayerExpanded(false);
       }
     };
 
@@ -192,7 +202,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isPanelOverlay, panelDrawerOpen]);
+  }, [isPlayerExpanded]);
 
   useEffect(() => {
     let ignore = false;
@@ -249,7 +259,7 @@ export function App() {
         } else if (nextTracks.length === 0) {
           setLibraryMessage("No supported audio files were found in this view. Try another folder or a broader search.");
         } else {
-          setLibraryMessage(`${nextTracks.length} tracks are available in the current library scope.`);
+          setLibraryMessage(`${nextTracks.length} indexed tracks are in the current library scope.`);
         }
       } catch (error) {
         if (!ignore) {
@@ -277,10 +287,10 @@ export function App() {
   const currentRootLabel = currentRoot?.displayName ?? "All folders";
 
   useEffect(() => {
-    setSelectedTrackId((current) => (
-      visibleTracks.some((track) => track.id === current) ? current : (visibleTracks[0]?.id ?? null)
-    ));
-  }, [availabilityFilter, libraryTracks]);
+    if (!selectedTrackId && visibleTracks.length > 0) {
+      setSelectedTrackId(visibleTracks[0].id);
+    }
+  }, [selectedTrackId, visibleTracks]);
 
   useEffect(() => {
     if (!selectedTrackId) {
@@ -316,6 +326,11 @@ export function App() {
           return;
         }
 
+        if (!nextTrackDetail) {
+          setSelectedTrackId((current) => (current === trackId ? null : current));
+          return;
+        }
+
         startTransition(() => {
           setTrackDetail(nextTrackDetail);
           setLyrics(nextLyrics);
@@ -336,12 +351,19 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = window.library.onScanProgress((progress) => {
-      setScanProgress(progress);
-      if (progress.message) {
-        setLibraryMessage(progress.message);
+      const isActiveScan =
+        progress.phase === "queued" ||
+        progress.phase === "scanning-root" ||
+        progress.phase === "parsing-file";
+
+      setScanProgress(isActiveScan ? progress : null);
+
+      if (progress.phase === "scanning-root" && progress.currentRootPath) {
+        setLibraryMessage(`Scanning ${progress.currentRootPath}`);
       }
 
       if (progress.phase === "completed") {
+        setLibraryMessage(progress.message ?? "Library scan completed.");
         setReloadTick((value) => value + 1);
       }
 
@@ -390,7 +412,10 @@ export function App() {
         if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
           playbackIntentRef.current = false;
           setIsPlaying(false);
-          setPlaybackError(playbackRejectionMessage(trackDetail?.format ?? "", error));
+          if (error instanceof ResourceRequestError && error.status === 404) {
+            setReloadTick((value) => value + 1);
+          }
+          setPlaybackError(playbackRejectionMessage(trackDetail, error));
         }
       }
     }
@@ -406,6 +431,23 @@ export function App() {
       clearTrackObjectUrl();
     };
   }, [selectedTrackId]);
+
+  useEffect(() => {
+    if (!trackDetail || trackDetail.availability === "available") {
+      return;
+    }
+
+    const audio = audioRef.current;
+    playbackIntentRef.current = false;
+    clearTrackObjectUrl();
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    setIsPlaying(false);
+    setPlaybackError(unavailableTrackMessage(trackDetail));
+  }, [trackDetail]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -433,67 +475,96 @@ export function App() {
     };
   }, []);
 
+  const handleAudioPlay = useEffectEvent(() => {
+    setIsPlaying(true);
+    setPlaybackError(null);
+    if (activePanelTabRef.current !== "lyrics") {
+      setActivePanelTab("queue");
+    }
+  });
+
+  const handleAudioPause = useEffectEvent(() => {
+    setIsPlaying(false);
+  });
+
+  const handleAudioLoadedMetadata = useEffectEvent(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    setPlaybackError(null);
+    setDurationMs(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
+    setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
+  });
+
+  const handleAudioTimeUpdate = useEffectEvent(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
+  });
+
+  const handleAudioEnded = useEffectEvent(() => {
+    setIsPlaying(false);
+    const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
+    const nextTrack = visibleTracks[currentIndex + 1];
+    if (nextTrack) {
+      setSelectedTrackId(nextTrack.id);
+    } else {
+      playbackIntentRef.current = false;
+    }
+  });
+
+  const handleAudioError = useEffectEvent(() => {
+    playbackIntentRef.current = false;
+    setIsPlaying(false);
+    setPlaybackError(playbackErrorMessage(trackDetail?.format ?? ""));
+  });
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
     }
 
-    const handlePlay = () => {
-      setIsPlaying(true);
-      setPlaybackError(null);
-      if (activePanelTabRef.current !== "lyrics") {
-        setActivePanelTab("queue");
-      }
-    };
-    const handlePause = () => setIsPlaying(false);
-    const handleLoadedMetadata = () => {
-      setPlaybackError(null);
-      setDurationMs(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
-      setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
-    };
-    const handleTimeUpdate = () => {
-      setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
-    };
-    const handleEnded = () => {
-      setIsPlaying(false);
-      const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
-      const nextTrack = visibleTracks[currentIndex + 1];
-      if (nextTrack) {
-        setSelectedTrackId(nextTrack.id);
-      } else {
-        playbackIntentRef.current = false;
-      }
-    };
-    const handleError = () => {
-      playbackIntentRef.current = false;
-      setIsPlaying(false);
-      setPlaybackError(playbackErrorMessage(trackDetail?.format ?? ""));
-    };
-
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("seeked", handleTimeUpdate);
-    audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("error", handleError);
+    audio.addEventListener("play", handleAudioPlay);
+    audio.addEventListener("pause", handleAudioPause);
+    audio.addEventListener("loadedmetadata", handleAudioLoadedMetadata);
+    audio.addEventListener("timeupdate", handleAudioTimeUpdate);
+    audio.addEventListener("seeked", handleAudioTimeUpdate);
+    audio.addEventListener("ended", handleAudioEnded);
+    audio.addEventListener("error", handleAudioError);
 
     return () => {
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("seeked", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("play", handleAudioPlay);
+      audio.removeEventListener("pause", handleAudioPause);
+      audio.removeEventListener("loadedmetadata", handleAudioLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleAudioTimeUpdate);
+      audio.removeEventListener("seeked", handleAudioTimeUpdate);
+      audio.removeEventListener("ended", handleAudioEnded);
+      audio.removeEventListener("error", handleAudioError);
     };
-  }, [selectedTrackId, trackDetail, visibleTracks]);
+  }, [
+    handleAudioEnded,
+    handleAudioError,
+    handleAudioLoadedMetadata,
+    handleAudioPause,
+    handleAudioPlay,
+    handleAudioTimeUpdate
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || lyrics.mode !== "synced") {
       setActiveLyricLine(-1);
+      return;
+    }
+
+    if (!isPlayerExpanded || activePanelTab !== "lyrics") {
+      setActiveLyricLine(currentLyricIndex(lyrics, Math.round(audio.currentTime * 1000)));
       return;
     }
 
@@ -538,9 +609,13 @@ export function App() {
       audio.removeEventListener("pause", stop);
       audio.removeEventListener("ended", stop);
     };
-  }, [lyrics, selectedTrackId]);
+  }, [activePanelTab, isPlayerExpanded, lyrics, selectedTrackId]);
 
   useEffect(() => {
+    if (!isPlayerExpanded || activePanelTab !== "lyrics") {
+      return;
+    }
+
     const activeElement = lyricRefs.current.get(activeLyricLine);
     if (activeElement) {
       activeElement.scrollIntoView({
@@ -548,7 +623,11 @@ export function App() {
         behavior: "smooth"
       });
     }
-  }, [activeLyricLine]);
+  }, [activeLyricLine, activePanelTab, isPlayerExpanded]);
+
+  useEffect(() => {
+    lyricRefs.current.clear();
+  }, [selectedTrackId, lyrics.mode]);
 
   useEffect(() => {
     return () => {
@@ -617,6 +696,12 @@ export function App() {
       return;
     }
 
+    if (trackDetail && trackDetail.availability !== "available") {
+      playbackIntentRef.current = false;
+      setPlaybackError(unavailableTrackMessage(trackDetail));
+      return;
+    }
+
     if (audio.paused) {
       playbackIntentRef.current = true;
       setPlaybackError(null);
@@ -625,7 +710,7 @@ export function App() {
       }
       void audio.play().catch((error) => {
         playbackIntentRef.current = false;
-        setPlaybackError(playbackRejectionMessage(trackDetail?.format ?? "", error));
+        setPlaybackError(playbackRejectionMessage(trackDetail, error));
       });
       return;
     }
@@ -645,6 +730,11 @@ export function App() {
   }
 
   function stepTrack(direction: -1 | 1): void {
+    if (direction === -1 && playbackPositionMs >= 3000) {
+      handleSeek(0);
+      return;
+    }
+
     if (visibleTracks.length === 0) {
       return;
     }
@@ -659,31 +749,22 @@ export function App() {
 
   function handlePanelTabChange(tab: ActivePanelTab): void {
     setActivePanelTab(tab);
-    if (isPanelOverlay) {
-      setPanelDrawerOpen(true);
-    }
-  }
-
-  function handleOpenNowPlaying(): void {
-    setActivePanelTab(isPlaying ? "queue" : "details");
-    if (isPanelOverlay) {
-      setPanelDrawerOpen(true);
-    }
+    setIsPlayerExpanded(true);
   }
 
   function handleJumpToFolders(): void {
-    rootsSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest"
+    rootsSectionRef.current?.scrollTo({
+      top: 0,
+      behavior: "smooth"
     });
   }
 
   function handleTogglePanel(): void {
-    if (!isPanelOverlay) {
-      return;
+    if (!isPlayerExpanded && isPlaying && activePanelTabRef.current !== "lyrics") {
+      setActivePanelTab("queue");
     }
 
-    setPanelDrawerOpen((current) => !current);
+    setIsPlayerExpanded((current) => !current);
   }
 
   function handleVolumeChange(nextVolumePercent: number): void {
@@ -695,17 +776,13 @@ export function App() {
     lyricRefs.current.set(index, element);
   }
 
-  const statusLabel = scanPhaseLabel(scanProgress?.phase);
-  const statusTone = scanPhaseTone(scanProgress?.phase);
-  const statusDetail = scanProgress
-    ? `${scanProgress.processedFiles} / ${scanProgress.discoveredFiles} files`
-    : libraryMessage;
+  const canPlaySelectedTrack = trackDetail?.availability === "available";
 
   return (
     <div className="app-shell">
       <audio ref={audioRef} />
 
-      <div className="app-workspace">
+      <div className={`app-workspace ${isPlayerExpanded ? "expanded" : ""}`}>
         <NavigationRail
           roots={roots}
           selectedRootId={selectedRootId}
@@ -714,89 +791,80 @@ export function App() {
           onSelectRoot={setSelectedRootId}
           onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
           onJumpToFolders={handleJumpToFolders}
-          onOpenNowPlaying={handleOpenNowPlaying}
         />
 
-        <div className="app-main">
+        <div className={`app-main ${isPlayerExpanded ? "expanded" : ""}`}>
           <TopBar
             roots={roots}
             search={search}
             selectedRootId={selectedRootId}
             searchInputRef={searchInputRef}
-            statusLabel={statusLabel}
-            statusTone={statusTone}
-            statusDetail={statusDetail}
+            scanProgress={scanProgress}
             onSearchChange={setSearch}
             onSelectRoot={setSelectedRootId}
             onAddRoots={() => void handleAddRoots()}
             onRescan={() => void handleRescan()}
-            onTogglePanel={handleTogglePanel}
           />
 
-          <main className="library-view">
-            <LibraryHero
-              currentRootLabel={currentRootLabel}
-              isLoading={isLoadingLibrary}
-              visibleTrackCount={visibleTracks.length}
-              filterCounts={availabilityCounts}
-              activeFilter={availabilityFilter}
-              libraryMessage={libraryMessage}
-              scanProgress={scanProgress}
-              onFilterChange={setAvailabilityFilter}
-            />
-
+          <main className={isPlayerExpanded ? "expanded-player-view" : "library-view"}>
             {libraryError ? <div className="error-banner">{libraryError}</div> : null}
             {playbackError ? <div className="error-banner">{playbackError}</div> : null}
 
-            <TrackTable
-              tracks={visibleTracks}
-              selectedTrackId={selectedTrackId}
-              hasRoots={roots.length > 0}
-              isLoading={isLoadingLibrary}
-              onAddRoots={() => void handleAddRoots()}
-              onSelectTrack={setSelectedTrackId}
-            />
+            {isPlayerExpanded ? (
+              <ExpandedPlayer
+                activeTab={activePanelTab}
+                selectedTrackId={selectedTrackId}
+                queueTracks={queueTracks}
+                trackDetail={trackDetail}
+                lyrics={lyrics}
+                activeLyricLine={activeLyricLine}
+                onSelectTrack={setSelectedTrackId}
+                onTabChange={handlePanelTabChange}
+                setLyricRef={handleSetLyricRef}
+              />
+            ) : (
+              <>
+                <LibraryHero
+                  currentRootLabel={currentRootLabel}
+                  isLoading={isLoadingLibrary}
+                  visibleTrackCount={visibleTracks.length}
+                  filterCounts={availabilityCounts}
+                  activeFilter={availabilityFilter}
+                  libraryMessage={libraryMessage}
+                  onFilterChange={setAvailabilityFilter}
+                />
+
+                <TrackTable
+                  tracks={visibleTracks}
+                  selectedTrackId={selectedTrackId}
+                  hasRoots={roots.length > 0}
+                  isLoading={isLoadingLibrary}
+                  activeFilter={availabilityFilter}
+                  onAddRoots={() => void handleAddRoots()}
+                  onSelectTrack={setSelectedTrackId}
+                />
+              </>
+            )}
           </main>
         </div>
-
-        <ContextPanel
-          isOverlay={isPanelOverlay}
-          isOpen={!isPanelOverlay || panelDrawerOpen}
-          activeTab={activePanelTab}
-          selectedTrackId={selectedTrackId}
-          queueTracks={queueTracks}
-          trackDetail={trackDetail}
-          lyrics={lyrics}
-          activeLyricLine={activeLyricLine}
-          onClose={() => setPanelDrawerOpen(false)}
-          onSelectTrack={setSelectedTrackId}
-          onTabChange={handlePanelTabChange}
-          setLyricRef={handleSetLyricRef}
-        />
       </div>
-
-      {isPanelOverlay ? (
-        <button
-          type="button"
-          className={`panel-backdrop ${panelDrawerOpen ? "open" : ""}`}
-          onClick={() => setPanelDrawerOpen(false)}
-          aria-label="Close side panel"
-        />
-      ) : null}
 
       <BottomPlayer
         track={trackDetail}
         isPlaying={isPlaying}
+        isExpanded={isPlayerExpanded}
+        canPlay={canPlaySelectedTrack}
         currentTimeMs={playbackPositionMs}
         durationMs={durationMs || trackDetail?.durationMs || 0}
         volumePercent={volumePercent}
-        canStepPrev={selectedTrackIndex > 0}
+        canStepPrev={selectedTrackIndex > 0 || playbackPositionMs >= 3000}
         canStepNext={selectedTrackIndex >= 0 && selectedTrackIndex < visibleTracks.length - 1}
         onStepPrev={() => stepTrack(-1)}
         onStepNext={() => stepTrack(1)}
         onTogglePlay={handleTogglePlay}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}
+        onTogglePanel={handleTogglePanel}
       />
     </div>
   );

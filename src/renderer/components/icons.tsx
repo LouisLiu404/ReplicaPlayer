@@ -181,6 +181,22 @@ export function VolumeIcon(props: IconProps) {
   );
 }
 
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m6 14 6-6 6 6" />
+    </BaseIcon>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m6 10 6 6 6-6" />
+    </BaseIcon>
+  );
+}
+
 export function MusicNoteIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>

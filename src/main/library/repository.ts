@@ -203,6 +203,18 @@ export class LibraryRepository {
     return row ? mapRoot(row) : null;
   }
 
+  getRoot(rootId: string): LibraryRoot | null {
+    const statement = this.db.prepare(`
+      SELECT id, path, display_name, status, added_at, last_scan_at, last_error
+      FROM library_roots
+      WHERE id = ?
+      LIMIT 1
+    `);
+
+    const row = statement.get(rootId) as Record<string, unknown> | undefined;
+    return row ? mapRoot(row) : null;
+  }
+
   insertRoot(root: {
     id: string;
     path: string;

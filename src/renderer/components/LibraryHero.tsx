@@ -1,6 +1,4 @@
-import type { ScanProgress } from "../../shared/types";
 import type { AvailabilityFilter } from "./ui-types";
-import { scanPhaseLabel } from "../utils";
 
 interface FilterCounts {
   all: number;
@@ -16,16 +14,8 @@ interface LibraryHeroProps {
   filterCounts: FilterCounts;
   activeFilter: AvailabilityFilter;
   libraryMessage: string;
-  scanProgress: ScanProgress | null;
   onFilterChange: (filter: AvailabilityFilter) => void;
 }
-
-const FILTERS: Array<{ id: AvailabilityFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "available", label: "Available" },
-  { id: "missing", label: "Missing" },
-  { id: "offline", label: "Offline" }
-];
 
 export function LibraryHero({
   currentRootLabel,
@@ -34,13 +24,17 @@ export function LibraryHero({
   filterCounts,
   activeFilter,
   libraryMessage,
-  scanProgress,
   onFilterChange
 }: LibraryHeroProps) {
-  const phaseLabel = scanPhaseLabel(scanProgress?.phase);
-  const phaseDetail = scanProgress
-    ? `${scanProgress.processedFiles} / ${scanProgress.discoveredFiles} indexed`
-    : "Persistent local library";
+  const filters: Array<{ id: AvailabilityFilter; label: string; count: number }> = [
+    { id: "all", label: "All", count: filterCounts.all },
+    { id: "available", label: "Available", count: filterCounts.available },
+    { id: "missing", label: "Missing", count: filterCounts.missing },
+    { id: "offline", label: "Unavailable", count: filterCounts.offline }
+  ];
+  const visibleFilters = filters.filter(
+    (filter) => filter.id === "all" || filter.id === "available" || filter.count > 0 || activeFilter === filter.id
+  );
 
   return (
     <section className="library-hero">
@@ -55,16 +49,27 @@ export function LibraryHero({
         </p>
       </div>
 
-      <div className="hero-status-banner">
-        <div>
-          <strong>{phaseLabel}</strong>
-          <p>{libraryMessage}</p>
+      <p className="library-summary-copy">{libraryMessage}</p>
+
+      {filterCounts.missing > 0 || filterCounts.offline > 0 ? (
+        <div className="hero-note-row">
+          {filterCounts.missing > 0 ? (
+            <div className="hero-note-pill warning">
+              <strong>{filterCounts.missing}</strong>
+              <span>missing files need a rescan or cleanup</span>
+            </div>
+          ) : null}
+          {filterCounts.offline > 0 ? (
+            <div className="hero-note-pill">
+              <strong>{filterCounts.offline}</strong>
+              <span>tracks are inside a saved folder that is unavailable</span>
+            </div>
+          ) : null}
         </div>
-        <span>{phaseDetail}</span>
-      </div>
+      ) : null}
 
       <div className="filter-chip-row" role="tablist" aria-label="Track availability filters">
-        {FILTERS.map((filter) => (
+        {visibleFilters.map((filter) => (
           <button
             key={filter.id}
             type="button"
@@ -72,7 +77,7 @@ export function LibraryHero({
             onClick={() => onFilterChange(filter.id)}
           >
             <span>{filter.label}</span>
-            <strong>{filterCounts[filter.id]}</strong>
+            <strong>{filter.count}</strong>
           </button>
         ))}
       </div>

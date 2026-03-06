@@ -2,7 +2,7 @@ import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/type
 import type { ActivePanelTab } from "./ui-types";
 import { formatDuration, formatNumber, lyricsSourceLabel } from "../utils";
 import { EmptyState } from "./EmptyState";
-import { CloseIcon, DiscIcon, InfoIcon, LyricsIcon, MusicNoteIcon, QueueIcon } from "./icons";
+import { CloseIcon, DiscIcon, LyricsIcon, MusicNoteIcon, QueueIcon } from "./icons";
 
 interface ContextPanelProps {
   isOverlay: boolean;
@@ -19,10 +19,10 @@ interface ContextPanelProps {
   setLyricRef: (index: number, element: HTMLDivElement | null) => void;
 }
 
-const TABS: Array<{ id: ActivePanelTab; label: string; icon: typeof QueueIcon }> = [
-  { id: "queue", label: "Up Next", icon: QueueIcon },
-  { id: "lyrics", label: "Lyrics", icon: LyricsIcon },
-  { id: "details", label: "Details", icon: InfoIcon }
+const TABS: Array<{ id: ActivePanelTab; label: string }> = [
+  { id: "queue", label: "Up Next" },
+  { id: "lyrics", label: "Lyrics" },
+  { id: "details", label: "Details" }
 ];
 
 export function ContextPanel({
@@ -40,16 +40,21 @@ export function ContextPanel({
   setLyricRef
 }: ContextPanelProps) {
   return (
-    <aside className={`context-panel ${isOverlay ? "overlay" : ""} ${isOpen ? "open" : ""}`}>
+    <aside
+      className={`context-panel ${isOverlay ? "overlay" : ""} ${isOpen ? "open" : "closed"}`}
+      aria-hidden={!isOpen}
+    >
       <div className="context-panel-head">
         <div>
           <p className="section-kicker">Now Playing</p>
           <h2>{trackDetail?.title ?? "Nothing selected"}</h2>
           <p>{trackDetail ? `${trackDetail.artist} • ${trackDetail.album}` : "Choose a track from the library."}</p>
         </div>
-        <button type="button" className="context-close-button" onClick={onClose} aria-label="Close side panel">
-          <CloseIcon />
-        </button>
+        {isOverlay ? (
+          <button type="button" className="context-close-button" onClick={onClose} aria-label="Close side panel">
+            <CloseIcon />
+          </button>
+        ) : null}
       </div>
 
       <div className="context-summary-card">
@@ -69,24 +74,21 @@ export function ContextPanel({
       </div>
 
       <div className="context-tab-row" role="tablist" aria-label="Context panel">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={`context-tab ${activeTab === tab.id ? "active" : ""}`}
-              onClick={() => onTabChange(tab.id)}
-            >
-              <Icon className="context-tab-icon" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`context-tab ${activeTab === tab.id ? "active" : ""}`}
+            onClick={() => onTabChange(tab.id)}
+          >
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="context-panel-body">
+      <div className={`context-panel-body tab-${activeTab}`}>
         {activeTab === "queue" ? (
           queueTracks.length === 0 ? (
             <EmptyState
@@ -96,7 +98,7 @@ export function ContextPanel({
               icon={<QueueIcon className="empty-state-glyph" />}
             />
           ) : (
-            <div className="queue-list">
+            <div className="panel-scroll-section queue-list">
               {queueTracks.map((track, index) => (
                 <button
                   key={track.id}
@@ -105,6 +107,21 @@ export function ContextPanel({
                   onClick={() => onSelectTrack(track.id)}
                 >
                   <span className="queue-index">{index === 0 ? "Now" : index}</span>
+                  <div className="queue-artwork">
+                    {track.artworkUrl ? (
+                      <img
+                        src={track.artworkUrl}
+                        alt=""
+                        className="queue-artwork-image"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="queue-artwork-fallback">
+                        <DiscIcon className="queue-artwork-glyph" />
+                      </div>
+                    )}
+                  </div>
                   <div className="queue-copy">
                     <strong title={track.title}>{track.title}</strong>
                     <span title={track.artist}>{track.artist}</span>
@@ -125,18 +142,28 @@ export function ContextPanel({
               icon={<LyricsIcon className="empty-state-glyph" />}
             />
           ) : lyrics.mode === "plain" ? (
-            <div className="lyrics-panel">
-              <div className="context-meta-row">
-                <span>{lyricsSourceLabel(lyrics.source)}</span>
+            <section className="lyrics-stage">
+              <div className="lyrics-stage-head">
+                <div className="context-meta-row">
+                  <span>{lyricsSourceLabel(lyrics.source)}</span>
+                </div>
+                <strong>{trackDetail?.title ?? "Lyrics"}</strong>
+                <p>{trackDetail?.artist ?? "Local lyrics"}</p>
               </div>
-              <pre className="plain-lyrics">{lyrics.text}</pre>
-            </div>
+              <div className="lyrics-scroll">
+                <pre className="plain-lyrics">{lyrics.text}</pre>
+              </div>
+            </section>
           ) : (
-            <div className="lyrics-panel">
-              <div className="context-meta-row">
-                <span>{lyricsSourceLabel(lyrics.source)}</span>
+            <section className="lyrics-stage">
+              <div className="lyrics-stage-head">
+                <div className="context-meta-row">
+                  <span>{lyricsSourceLabel(lyrics.source)}</span>
+                </div>
+                <strong>{trackDetail?.title ?? "Lyrics"}</strong>
+                <p>{trackDetail?.artist ?? "Local lyrics"}</p>
               </div>
-              <div className="synced-lyrics">
+              <div className="lyrics-scroll synced-lyrics">
                 {lyrics.lines.map((line, index) => (
                   <div
                     key={`${line.startMs}-${index}`}
@@ -149,13 +176,13 @@ export function ContextPanel({
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )
         ) : null}
 
         {activeTab === "details" ? (
           trackDetail ? (
-            <div className="details-panel">
+            <div className="panel-scroll-section details-panel">
               <div className="context-meta-row">
                 <span>{trackDetail.format}</span>
                 <span>{formatDuration(trackDetail.durationMs)}</span>
