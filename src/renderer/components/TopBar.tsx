@@ -1,30 +1,20 @@
 import type { RefObject } from "react";
 
-import type { LibraryRoot, ScanProgress } from "../../shared/types";
-import { PlusIcon, RefreshIcon, SearchIcon } from "./icons";
+import type { ScanProgress } from "../../shared/types";
+import { SearchIcon } from "./icons";
 
 interface TopBarProps {
-  roots: LibraryRoot[];
   search: string;
-  selectedRootId: string;
   searchInputRef: RefObject<HTMLInputElement | null>;
   scanProgress: ScanProgress | null;
   onSearchChange: (value: string) => void;
-  onSelectRoot: (value: string) => void;
-  onAddRoots: () => void;
-  onRescan: () => void;
 }
 
 export function TopBar({
-  roots,
   search,
-  selectedRootId,
   searchInputRef,
   scanProgress,
-  onSearchChange,
-  onSelectRoot,
-  onAddRoots,
-  onRescan
+  onSearchChange
 }: TopBarProps) {
   const isScanActive =
     scanProgress?.phase === "queued" ||
@@ -47,18 +37,6 @@ export function TopBar({
             placeholder="Search by title, artist, album, or file name"
           />
         </label>
-
-        <label className="root-select-shell">
-          <span>Scope</span>
-          <select value={selectedRootId} onChange={(event) => onSelectRoot(event.target.value)}>
-            <option value="">All folders</option>
-            {roots.map((root) => (
-              <option key={root.id} value={root.id}>
-                {root.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
       <div className="top-bar-trailing">
@@ -73,15 +51,6 @@ export function TopBar({
             </div>
           </div>
         ) : null}
-
-        <button type="button" className="cta-button" onClick={onAddRoots}>
-          <PlusIcon />
-          <span>Add Folders</span>
-        </button>
-        <button type="button" className="cta-button secondary" onClick={onRescan} disabled={roots.length === 0}>
-          <RefreshIcon />
-          <span>Rescan</span>
-        </button>
       </div>
     </header>
   );

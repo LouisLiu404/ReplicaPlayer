@@ -10,8 +10,9 @@ interface TrackTableProps {
   hasRoots: boolean;
   isLoading: boolean;
   activeFilter: AvailabilityFilter;
-  onAddRoots: () => void;
+  onOpenSettings: () => void;
   onSelectTrack: (trackId: string) => void;
+  onPlayTrack: (trackId: string) => void;
 }
 
 export function TrackTable({
@@ -20,17 +21,18 @@ export function TrackTable({
   hasRoots,
   isLoading,
   activeFilter,
-  onAddRoots,
-  onSelectTrack
+  onOpenSettings,
+  onSelectTrack,
+  onPlayTrack
 }: TrackTableProps) {
   if (tracks.length === 0) {
     if (!hasRoots) {
       return (
         <EmptyState
           title="Build your library"
-          description="Add one or more local folders to populate the library surface and queue."
-          actionLabel="Add Folders"
-          onAction={onAddRoots}
+          description="Open Settings to add one or more tracked folders."
+          actionLabel="Open Settings"
+          onAction={onOpenSettings}
           icon={<MusicNoteIcon className="empty-state-glyph" />}
         />
       );
@@ -69,6 +71,7 @@ export function TrackTable({
             type="button"
             className={`track-list-row ${selectedTrackId === track.id ? "active" : ""}`}
             onClick={() => onSelectTrack(track.id)}
+            onDoubleClick={() => onPlayTrack(track.id)}
             aria-label={`Select ${track.title} by ${track.artist}`}
           >
             <span className="track-index-cell">{index + 1}</span>

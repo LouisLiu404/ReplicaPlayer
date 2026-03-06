@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -25,6 +25,50 @@ export function ReplicaMark(props: IconProps) {
         d="M20.4 9.4V18a3.7 3.7 0 1 1-1.6-3.05v-5.1l-6.4 1.2v7a3.7 3.7 0 1 1-1.6-3.04V8.1a1.1 1.1 0 0 1 .9-1.08l7.64-1.43a.92.92 0 0 1 1.08.9Z"
         fill="currentColor"
       />
+    </svg>
+  );
+}
+
+export function PlayerGlyph(props: IconProps) {
+  const iconId = useId().replace(/:/g, "");
+  const orangeGradId = `${iconId}-orange-grad`;
+  const blackGradId = `${iconId}-black-grad`;
+  const glowId = `${iconId}-orange-glow`;
+
+  return (
+    <svg viewBox="0 0 512 512" fill="none" aria-hidden="true" {...props}>
+      <defs>
+        <linearGradient id={orangeGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff8a00" />
+          <stop offset="100%" stopColor="#ff3300" />
+        </linearGradient>
+
+        <linearGradient id={blackGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#2a2a2a" />
+          <stop offset="100%" stopColor="#000000" />
+        </linearGradient>
+
+        <filter id={glowId} x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="20" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+      </defs>
+
+      <g transform="translate(-15, 12)">
+        <path
+          d="M 176 136 C 166 130 156 136 156 148 L 156 324 C 156 336 166 342 176 336 L 336 248 C 346 242 346 230 336 224 Z"
+          fill={`url(#${orangeGradId})`}
+          filter={`url(#${glowId})`}
+          opacity="0.85"
+        />
+
+        <path
+          d="M 226 186 C 216 180 206 186 206 198 L 206 374 C 206 386 216 392 226 386 L 386 298 C 396 292 396 280 386 274 Z"
+          fill={`url(#${blackGradId})`}
+          stroke={`url(#${orangeGradId})`}
+          strokeWidth="6"
+        />
+      </g>
     </svg>
   );
 }
@@ -201,6 +245,38 @@ export function MusicNoteIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
       <path d="M15.5 6.5v8.2a3 3 0 1 1-1.8-2.73V8l-5.2 1v5.7a3 3 0 1 1-1.8-2.72V7.7a1 1 0 0 1 .8-.98l6.84-1.28a.92.92 0 0 1 1.08.9Z" />
+    </BaseIcon>
+  );
+}
+
+export function SettingsIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19 12a7 7 0 0 0-.1-1.1l2-1.55-2-3.46-2.35.8a7.3 7.3 0 0 0-1.9-1.1L14.3 3h-4.6l-.35 2.58a7.3 7.3 0 0 0-1.9 1.1l-2.35-.8-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .38.03.75.1 1.1l-2 1.55 2 3.46 2.35-.8c.58.45 1.22.82 1.9 1.1L9.7 21h4.6l.35-2.58c.68-.28 1.32-.65 1.9-1.1l2.35.8 2-3.46-2-1.55c.07-.35.1-.72.1-1.1Z" />
+    </BaseIcon>
+  );
+}
+
+export function ShuffleIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M16 6h4v4" />
+      <path d="m4 18 6-6" />
+      <path d="m10 12 2-2c1.1-1.1 1.65-1.65 2.3-1.83.65-.17 1.43-.17 2.99-.17H20" />
+      <path d="m4 6 6 6" />
+      <path d="m14 14 2 2c1.1 1.1 1.65 1.65 2.3 1.83.65.17 1.43.17 2.99.17H20" />
+    </BaseIcon>
+  );
+}
+
+export function RepeatIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m16 4 4 4-4 4" />
+      <path d="M20 8H9a4 4 0 0 0 0 8h2" />
+      <path d="m8 12-4 4 4 4" />
+      <path d="M4 16h11a4 4 0 0 0 0-8h-2" />
     </BaseIcon>
   );
 }

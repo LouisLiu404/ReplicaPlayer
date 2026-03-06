@@ -1,5 +1,12 @@
 import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/types";
-import { availabilityDescription, formatDuration, formatNumber, lyricsSourceLabel } from "../utils";
+import {
+  availabilityDescription,
+  formatBitDepthCompact,
+  formatDuration,
+  formatNumber,
+  formatSampleRateCompact,
+  lyricsSourceLabel
+} from "../utils";
 import type { ActivePanelTab } from "./ui-types";
 import { DiscIcon, LyricsIcon, MusicNoteIcon, QueueIcon } from "./icons";
 import { EmptyState } from "./EmptyState";
@@ -33,6 +40,16 @@ export function ExpandedPlayer({
   onTabChange,
   setLyricRef
 }: ExpandedPlayerProps) {
+  const stageLabels = trackDetail
+    ? [
+        trackDetail.format,
+        formatBitDepthCompact(trackDetail.bitDepth),
+        formatSampleRateCompact(trackDetail.sampleRate),
+        formatDuration(trackDetail.durationMs),
+        availabilityDescription(trackDetail.availability)
+      ].filter((value): value is string => Boolean(value))
+    : [];
+
   return (
     <section className="expanded-player">
       <div className="expanded-player-grid">
@@ -51,18 +68,13 @@ export function ExpandedPlayer({
             )}
           </div>
 
-          <div className="expanded-stage-copy">
-            <p className="section-kicker">Now Playing</p>
-            <h2>{trackDetail?.title ?? "Nothing selected"}</h2>
-            <p>{trackDetail ? `${trackDetail.artist} • ${trackDetail.album}` : "Choose a track from the library."}</p>
-            {trackDetail ? (
-              <div className="expanded-stage-meta">
-                <span>{trackDetail.format}</span>
-                <span>{formatDuration(trackDetail.durationMs)}</span>
-                <span>{availabilityDescription(trackDetail.availability)}</span>
-              </div>
-            ) : null}
-          </div>
+          {stageLabels.length > 0 ? (
+            <div className="expanded-stage-meta">
+              {stageLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="expanded-panel">

@@ -1,49 +1,31 @@
-import type { RefObject } from "react";
-
 import type { LibraryRoot } from "../../shared/types";
-import { FolderIcon, LibraryIcon, ReplicaMark } from "./icons";
+import type { AppView } from "./ui-types";
+import { PlayerGlyph, SettingsIcon } from "./icons";
 
 interface NavigationRailProps {
+  activeView: AppView;
   roots: LibraryRoot[];
   selectedRootId: string;
   visibleTrackCount: number;
-  rootSectionRef: RefObject<HTMLDivElement | null>;
   onSelectRoot: (rootId: string) => void;
-  onRemoveRoot: (rootId: string) => void;
-  onJumpToFolders: () => void;
+  onOpenSettings: () => void;
 }
 
 export function NavigationRail({
+  activeView,
   roots,
   selectedRootId,
   visibleTrackCount,
-  rootSectionRef,
   onSelectRoot,
-  onRemoveRoot,
-  onJumpToFolders
+  onOpenSettings
 }: NavigationRailProps) {
   return (
     <aside className="navigation-rail">
-      <div className="rail-brand">
-        <ReplicaMark className="rail-brand-mark" />
-        <div className="rail-brand-copy">
-          <strong>Replica</strong>
-          <span>Player</span>
-        </div>
+      <div className="rail-topmark" aria-hidden="true">
+        <PlayerGlyph className="rail-topmark-icon" />
       </div>
 
-      <nav className="rail-nav" aria-label="Primary">
-        <button type="button" className="rail-nav-button active">
-          <LibraryIcon className="rail-nav-icon" />
-          <span>Library</span>
-        </button>
-        <button type="button" className="rail-nav-button" onClick={onJumpToFolders}>
-          <FolderIcon className="rail-nav-icon" />
-          <span>Folders</span>
-        </button>
-      </nav>
-
-      <div className="rail-roots" ref={rootSectionRef}>
+      <div className="rail-roots">
         <div className="rail-section-header">
           <span>Folders</span>
           <strong>{roots.length}</strong>
@@ -75,18 +57,21 @@ export function NavigationRail({
                   <strong>{root.displayName}</strong>
                   <small>{root.status === "available" ? "Available" : "Unavailable"}</small>
                 </button>
-                <button
-                  type="button"
-                  className="rail-root-remove"
-                  onClick={() => onRemoveRoot(root.id)}
-                  aria-label={`Remove ${root.displayName}`}
-                >
-                  Remove
-                </button>
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      <div className="rail-footer">
+        <button
+          type="button"
+          className={`rail-footer-button ${activeView === "settings" ? "active" : ""}`}
+          onClick={onOpenSettings}
+        >
+          <SettingsIcon className="rail-nav-icon" />
+          <span>Settings</span>
+        </button>
       </div>
     </aside>
   );

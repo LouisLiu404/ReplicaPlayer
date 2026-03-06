@@ -25,12 +25,26 @@ export function availabilityLabel(value: TrackAvailability): string {
 export function availabilityDescription(value: TrackAvailability): string {
   switch (value) {
     case "available":
-      return "Available on disk";
+      return "On disk";
     case "offline":
-      return "Saved folder unavailable";
+      return "Folder unavailable";
     case "missing":
-      return "File missing from disk";
+      return "Missing";
   }
+}
+
+export function formatSampleRateCompact(sampleRate: number | null): string | null {
+  if (sampleRate == null) {
+    return null;
+  }
+
+  const kiloHertz = sampleRate / 1000;
+  const precision = Number.isInteger(kiloHertz) ? 0 : 1;
+  return `${kiloHertz.toFixed(precision)} kHz`;
+}
+
+export function formatBitDepthCompact(bitDepth: number | null): string | null {
+  return bitDepth == null ? null : `${bitDepth}-bit`;
 }
 
 export function lyricsSourceLabel(source: LyricPayload["source"]): string {

@@ -1,6 +1,34 @@
+@font-face {
+  font-family: "MiSans";
+  src: url("../../otf/MiSans-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "MiSans";
+  src: url("../../otf/MiSans-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "MiSans";
+  src: url("../../otf/MiSans-Semibold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "MiSans";
+  src: url("../../otf/MiSans-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+}
+
 :root {
   color-scheme: dark;
-  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
   --player-height: 104px;
   --rail-width: 286px;
   --panel-width: 372px;
@@ -95,50 +123,14 @@ img {
 
 .navigation-rail {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 24px;
-  padding: 28px 22px 24px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  padding: 20px 22px 24px;
   border-right: 1px solid var(--divider);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 18%), var(--surface-0);
   min-height: 0;
 }
 
-.rail-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.rail-brand-mark {
-  width: 42px;
-  height: 42px;
-  color: var(--accent);
-}
-
-.rail-brand-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.rail-brand-copy strong {
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 1.02rem;
-  letter-spacing: -0.02em;
-}
-
-.rail-brand-copy span {
-  color: var(--text-tertiary);
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-.rail-nav {
-  display: grid;
-  gap: 8px;
-}
-
-.rail-nav-button,
 .rail-root-button,
 .rail-root-card,
 .top-icon-button,
@@ -147,6 +139,7 @@ img {
 .track-list-row,
 .queue-row,
 .context-tab,
+.transport-mode-button,
 .transport-icon-button,
 .transport-play-button {
   border: 0;
@@ -159,26 +152,21 @@ img {
     opacity 160ms ease;
 }
 
-.rail-nav-button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: transparent;
-  color: var(--text-secondary);
-  text-align: left;
-}
-
-.rail-nav-button.active,
-.rail-nav-button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
-}
-
 .rail-nav-icon {
   width: 18px;
   height: 18px;
+}
+
+.rail-topmark {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 30px;
+}
+
+.rail-topmark-icon {
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
 }
 
 .rail-roots {
@@ -224,16 +212,14 @@ img {
 }
 
 .rail-root-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: block;
   width: 100%;
   padding: 14px 14px 14px 16px;
   border-radius: 18px;
   background: var(--surface-2);
   border: 1px solid transparent;
   color: inherit;
+  text-align: left;
 }
 
 .rail-root-card.selected {
@@ -249,7 +235,7 @@ img {
 .context-panel-head h2,
 .library-hero h1,
 .hero-count-pill {
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .rail-root-button {
@@ -280,20 +266,39 @@ img {
   color: var(--text-secondary);
 }
 
-.rail-root-remove {
-  border: 0;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-secondary);
-  padding: 8px 10px;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  flex-shrink: 0;
-}
-
 .rail-empty-copy {
   margin: 0;
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.rail-footer {
+  display: grid;
+}
+
+.rail-footer-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.rail-footer-button.active,
+.rail-footer-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .app-main {
@@ -303,6 +308,10 @@ img {
   min-height: 0;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 20%);
+}
+
+.app-main.settings {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .top-bar {
@@ -367,18 +376,6 @@ img {
   height: 18px;
   color: var(--text-tertiary);
   transform: translateY(-50%);
-}
-
-.root-select-shell {
-  display: grid;
-  gap: 6px;
-}
-
-.root-select-shell select {
-  min-width: 172px;
-  padding: 12px 16px;
-  appearance: none;
-  max-width: 260px;
 }
 
 .scan-pill {
@@ -498,9 +495,9 @@ img {
 .filter-chip:hover,
 .track-list-row:hover,
 .queue-row:hover,
+.transport-mode-button:hover,
 .transport-icon-button:hover,
 .transport-play-button:hover,
-.rail-nav-button:hover,
 .rail-root-card:hover {
   transform: translateY(-1px);
 }
@@ -822,7 +819,7 @@ img {
 
 .empty-state-copy h3 {
   margin: 0 0 8px;
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 1.2rem;
 }
 
@@ -832,22 +829,26 @@ img {
 }
 
 .expanded-player-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 28px;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
+  padding-bottom: 20px;
 }
 
 .expanded-player {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .expanded-player-grid {
   display: grid;
   grid-template-columns: minmax(300px, 0.92fr) minmax(360px, 1fr);
   gap: 28px;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .expanded-stage,
@@ -862,14 +863,18 @@ img {
 
 .expanded-stage {
   display: grid;
-  align-content: start;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
   justify-items: center;
   gap: 24px;
   padding: 32px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .expanded-stage-art {
-  width: min(100%, 560px);
+  width: min(100%, 500px, calc(100vh - var(--player-height) - 280px));
+  max-height: min(500px, calc(100vh - var(--player-height) - 280px));
   aspect-ratio: 1;
   border-radius: 28px;
   overflow: hidden;
@@ -901,14 +906,17 @@ img {
   justify-items: center;
   gap: 12px;
   text-align: center;
+  max-width: min(100%, 560px);
+  align-self: start;
 }
 
 .expanded-stage-copy h2 {
   margin: 0;
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: clamp(2rem, 3vw, 3.25rem);
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: clamp(1.72rem, 2.65vw, 2.85rem);
   letter-spacing: -0.05em;
-  line-height: 0.96;
+  line-height: 1.02;
+  text-wrap: balance;
 }
 
 .expanded-stage-copy p {
@@ -922,6 +930,7 @@ img {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+  max-width: min(100%, 560px);
 }
 
 .expanded-stage-meta span {
@@ -940,6 +949,8 @@ img {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
   padding: 28px 24px 24px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .expanded-tab-row {
@@ -1190,6 +1201,7 @@ img {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+  height: 100%;
   border-radius: 24px;
   border: 1px solid var(--border);
   background:
@@ -1207,7 +1219,7 @@ img {
 .lyrics-stage-head strong {
   display: block;
   margin-top: 8px;
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 1.18rem;
   line-height: 1.15;
 }
@@ -1271,6 +1283,140 @@ img {
   margin-top: 8px;
 }
 
+.settings-main {
+  min-height: 0;
+  overflow: auto;
+  padding: 28px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.settings-view {
+  display: grid;
+  gap: 20px;
+}
+
+.settings-hero,
+.settings-root-card,
+.settings-scan-banner {
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.settings-hero {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px;
+}
+
+.settings-hero h1 {
+  margin: 0 0 10px;
+  font-family: "MiSans", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: clamp(2rem, 3.2vw, 3rem);
+  letter-spacing: -0.05em;
+}
+
+.settings-copy {
+  max-width: 640px;
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.settings-scan-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.settings-scan-banner span {
+  color: var(--text-secondary);
+}
+
+.settings-root-list {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-root-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+}
+
+.settings-root-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-root-glyph {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.settings-root-copy {
+  min-width: 0;
+}
+
+.settings-root-copy strong,
+.settings-root-copy span,
+.settings-root-copy small {
+  display: block;
+}
+
+.settings-root-copy strong {
+  margin-bottom: 6px;
+  font-size: 1rem;
+}
+
+.settings-root-copy span,
+.settings-root-copy small {
+  color: var(--text-secondary);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.settings-root-copy small {
+  margin-top: 8px;
+  color: var(--text-tertiary);
+}
+
+.settings-remove-button {
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.settings-remove-button:hover {
+  background: rgba(255, 107, 90, 0.16);
+  transform: translateY(-1px);
+}
+
 .detail-path-card small {
   display: block;
   margin-top: 10px;
@@ -1331,6 +1477,11 @@ img {
 }
 
 .bottom-player-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: stretch;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1343,8 +1494,12 @@ img {
 }
 
 .bottom-player-copy strong {
-  margin-bottom: 6px;
   font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.bottom-player-copy span {
+  line-height: 1.25;
 }
 
 .bottom-player-center {
@@ -1360,7 +1515,8 @@ img {
 }
 
 .transport-icon-button,
-.transport-play-button {
+.transport-play-button,
+.transport-mode-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1375,16 +1531,47 @@ img {
 }
 
 .transport-play-button {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   background: linear-gradient(135deg, rgba(255, 107, 90, 0.96), rgba(255, 142, 108, 0.92));
   color: #120d0b;
 }
 
+.transport-mode-button {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.transport-mode-button.active {
+  background: rgba(255, 107, 90, 0.16);
+  color: #ffd8d1;
+}
+
 .transport-icon-button svg,
-.transport-play-button svg {
+.transport-mode-button svg {
   width: 18px;
   height: 18px;
+}
+
+.transport-play-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.transport-mode-badge {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  min-width: 11px;
+  height: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .player-timeline {
@@ -1502,21 +1689,10 @@ input[type="range"]::-moz-range-thumb {
     padding-inline: 14px;
   }
 
-  .rail-brand {
-    justify-content: center;
-  }
-
-  .rail-brand-copy,
-  .rail-nav-button span,
   .rail-root-card small,
-  .rail-root-remove,
-  .rail-section-header span {
+  .rail-section-header span,
+  .rail-footer-button span {
     display: none;
-  }
-
-  .rail-nav-button {
-    justify-content: center;
-    padding: 14px;
   }
 
   .rail-root-card {
@@ -1528,6 +1704,11 @@ input[type="range"]::-moz-range-thumb {
     margin: 0;
     font-size: 0.76rem;
     text-align: center;
+  }
+
+  .rail-footer-button {
+    justify-content: center;
+    padding: 14px;
   }
 }
 
@@ -1582,6 +1763,14 @@ input[type="range"]::-moz-range-thumb {
 
   .expanded-stage {
     padding: 24px;
+  }
+
+  .settings-hero {
+    flex-direction: column;
+  }
+
+  .settings-actions {
+    justify-content: flex-start;
   }
 }
 
@@ -1640,5 +1829,9 @@ input[type="range"]::-moz-range-thumb {
 
   .expanded-stage-copy h2 {
     font-size: 2rem;
+  }
+
+  .settings-main {
+    padding-inline: 18px;
   }
 }

@@ -18,10 +18,10 @@ import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
 import { LibraryHero } from "./components/LibraryHero";
 import { NavigationRail } from "./components/NavigationRail";
+import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
-import type { ActivePanelTab, AvailabilityFilter } from "./components/ui-types";
-import { availabilityDescription } from "./utils";
+import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
 
 type AvailabilityCounts = {
   all: number;
@@ -29,6 +29,28 @@ type AvailabilityCounts = {
   missing: number;
   offline: number;
 };
+
+type PlaybackMode = "normal" | "shuffle" | "repeat-all" | "repeat-one";
+
+const VOLUME_STORAGE_KEY = "replica-player:volume-percent";
+
+function readStoredVolume(): number {
+  try {
+    const raw = window.localStorage.getItem(VOLUME_STORAGE_KEY);
+    if (!raw) {
+      return 100;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) {
+      return 100;
+    }
+
+    return Math.min(Math.max(parsed, 0), 100);
+  } catch {
+    return 100;
+  }
+}
 
 class ResourceRequestError extends Error {
   constructor(readonly status: number) {
@@ -128,11 +150,11 @@ export function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const rootsSectionRef = useRef<HTMLDivElement | null>(null);
   const playbackIntentRef = useRef(false);
   const trackObjectUrlRef = useRef<string | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
 
+  const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<TrackListItem[]>([]);
   const [selectedRootId, setSelectedRootId] = useState<string>("");
@@ -153,7 +175,8 @@ export function App() {
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
   const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-  const [volumePercent, setVolumePercent] = useState(78);
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>("normal");
+  const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
 
   const deferredSearch = useDeferredValue(search);
 
@@ -291,6 +314,12 @@ export function App() {
       setSelectedTrackId(visibleTracks[0].id);
     }
   }, [selectedTrackId, visibleTracks]);
+
+  useEffect(() => {
+    if (activeView === "settings") {
+      setIsPlayerExpanded(false);
+    }
+  }, [activeView]);
 
   useEffect(() => {
     if (!selectedTrackId) {
@@ -460,6 +489,14 @@ export function App() {
   }, [volumePercent]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(VOLUME_STORAGE_KEY, String(volumePercent));
+    } catch {
+      // Ignore storage failures; runtime volume still works.
+    }
+  }, [volumePercent]);
+
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
@@ -474,6 +511,24 @@ export function App() {
       audio.removeEventListener("volumechange", handleVolumeChange);
     };
   }, []);
+
+  function chooseRandomTrack(excludeTrackId: string | null): TrackListItem | null {
+    if (visibleTracks.length === 0) {
+      return null;
+    }
+
+    if (visibleTracks.length === 1) {
+      return visibleTracks[0];
+    }
+
+    const candidates = visibleTracks.filter((track) => track.id !== excludeTrackId);
+    if (candidates.length === 0) {
+      return visibleTracks[0];
+    }
+
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex] ?? candidates[0];
+  }
 
   const handleAudioPlay = useEffectEvent(() => {
     setIsPlaying(true);
@@ -509,13 +564,43 @@ export function App() {
 
   const handleAudioEnded = useEffectEvent(() => {
     setIsPlaying(false);
+    const audio = audioRef.current;
+    if (playbackMode === "repeat-one" && selectedTrackId) {
+      playbackIntentRef.current = true;
+      if (audio) {
+        audio.currentTime = 0;
+        void audio.play().catch((error) => {
+          playbackIntentRef.current = false;
+          setPlaybackError(playbackRejectionMessage(trackDetail, error));
+        });
+      }
+      return;
+    }
+
+    if (playbackMode === "shuffle") {
+      const nextTrack = chooseRandomTrack(selectedTrackId);
+      if (nextTrack) {
+        playbackIntentRef.current = true;
+        setSelectedTrackId(nextTrack.id);
+        return;
+      }
+    }
+
     const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
     const nextTrack = visibleTracks[currentIndex + 1];
     if (nextTrack) {
+      playbackIntentRef.current = true;
       setSelectedTrackId(nextTrack.id);
-    } else {
-      playbackIntentRef.current = false;
+      return;
     }
+
+    if (playbackMode === "repeat-all" && visibleTracks.length > 0) {
+      playbackIntentRef.current = true;
+      setSelectedTrackId(visibleTracks[0].id);
+      return;
+    }
+
+    playbackIntentRef.current = false;
   });
 
   const handleAudioError = useEffectEvent(() => {
@@ -739,8 +824,25 @@ export function App() {
       return;
     }
 
+    if (playbackMode === "shuffle") {
+      const randomTrack = chooseRandomTrack(selectedTrackId);
+      if (randomTrack) {
+        setSelectedTrackId(randomTrack.id);
+      }
+      return;
+    }
+
     const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
-    const targetIndex = currentIndex >= 0 ? currentIndex + direction : 0;
+    let targetIndex = currentIndex >= 0 ? currentIndex + direction : 0;
+
+    if (playbackMode === "repeat-all" && visibleTracks.length > 0) {
+      if (targetIndex < 0) {
+        targetIndex = visibleTracks.length - 1;
+      } else if (targetIndex >= visibleTracks.length) {
+        targetIndex = 0;
+      }
+    }
+
     const targetTrack = visibleTracks[targetIndex];
     if (targetTrack) {
       setSelectedTrackId(targetTrack.id);
@@ -752,11 +854,13 @@ export function App() {
     setIsPlayerExpanded(true);
   }
 
-  function handleJumpToFolders(): void {
-    rootsSectionRef.current?.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
+  function handleSelectRoot(rootId: string): void {
+    setSelectedRootId(rootId);
+    setActiveView("library");
+  }
+
+  function handleOpenSettings(): void {
+    setActiveView("settings");
   }
 
   function handleTogglePanel(): void {
@@ -765,6 +869,21 @@ export function App() {
     }
 
     setIsPlayerExpanded((current) => !current);
+  }
+
+  function handleCyclePlaybackMode(): void {
+    setPlaybackMode((current) => {
+      switch (current) {
+        case "normal":
+          return "shuffle";
+        case "shuffle":
+          return "repeat-all";
+        case "repeat-all":
+          return "repeat-one";
+        case "repeat-one":
+          return "normal";
+      }
+    });
   }
 
   function handleVolumeChange(nextVolumePercent: number): void {
@@ -776,7 +895,34 @@ export function App() {
     lyricRefs.current.set(index, element);
   }
 
+  function handlePlayTrack(trackId: string): void {
+    playbackIntentRef.current = true;
+    setPlaybackError(null);
+
+    if (selectedTrackId !== trackId) {
+      setSelectedTrackId(trackId);
+      return;
+    }
+
+    if (trackDetail && trackDetail.availability !== "available") {
+      playbackIntentRef.current = false;
+      setPlaybackError(unavailableTrackMessage(trackDetail));
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    void audio.play().catch((error) => {
+      playbackIntentRef.current = false;
+      setPlaybackError(playbackRejectionMessage(trackDetail, error));
+    });
+  }
+
   const canPlaySelectedTrack = trackDetail?.availability === "available";
+  const isSettingsView = activeView === "settings" && !isPlayerExpanded;
 
   return (
     <div className="app-shell">
@@ -784,29 +930,25 @@ export function App() {
 
       <div className={`app-workspace ${isPlayerExpanded ? "expanded" : ""}`}>
         <NavigationRail
+          activeView={activeView}
           roots={roots}
           selectedRootId={selectedRootId}
           visibleTrackCount={visibleTracks.length}
-          rootSectionRef={rootsSectionRef}
-          onSelectRoot={setSelectedRootId}
-          onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
-          onJumpToFolders={handleJumpToFolders}
+          onSelectRoot={handleSelectRoot}
+          onOpenSettings={handleOpenSettings}
         />
 
-        <div className={`app-main ${isPlayerExpanded ? "expanded" : ""}`}>
-          <TopBar
-            roots={roots}
-            search={search}
-            selectedRootId={selectedRootId}
-            searchInputRef={searchInputRef}
-            scanProgress={scanProgress}
-            onSearchChange={setSearch}
-            onSelectRoot={setSelectedRootId}
-            onAddRoots={() => void handleAddRoots()}
-            onRescan={() => void handleRescan()}
-          />
+        <div className={`app-main ${isPlayerExpanded ? "expanded" : ""} ${isSettingsView ? "settings" : ""}`}>
+          {!isSettingsView ? (
+            <TopBar
+              search={search}
+              searchInputRef={searchInputRef}
+              scanProgress={scanProgress}
+              onSearchChange={setSearch}
+            />
+          ) : null}
 
-          <main className={isPlayerExpanded ? "expanded-player-view" : "library-view"}>
+          <main className={isPlayerExpanded ? "expanded-player-view" : isSettingsView ? "settings-main" : "library-view"}>
             {libraryError ? <div className="error-banner">{libraryError}</div> : null}
             {playbackError ? <div className="error-banner">{playbackError}</div> : null}
 
@@ -821,6 +963,14 @@ export function App() {
                 onSelectTrack={setSelectedTrackId}
                 onTabChange={handlePanelTabChange}
                 setLyricRef={handleSetLyricRef}
+              />
+            ) : isSettingsView ? (
+              <SettingsView
+                roots={roots}
+                scanProgress={scanProgress}
+                onAddRoots={() => void handleAddRoots()}
+                onRescan={() => void handleRescan()}
+                onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
               />
             ) : (
               <>
@@ -840,8 +990,9 @@ export function App() {
                   hasRoots={roots.length > 0}
                   isLoading={isLoadingLibrary}
                   activeFilter={availabilityFilter}
-                  onAddRoots={() => void handleAddRoots()}
+                  onOpenSettings={handleOpenSettings}
                   onSelectTrack={setSelectedTrackId}
+                  onPlayTrack={handlePlayTrack}
                 />
               </>
             )}
@@ -854,16 +1005,27 @@ export function App() {
         isPlaying={isPlaying}
         isExpanded={isPlayerExpanded}
         canPlay={canPlaySelectedTrack}
+        playbackMode={playbackMode}
         currentTimeMs={playbackPositionMs}
         durationMs={durationMs || trackDetail?.durationMs || 0}
         volumePercent={volumePercent}
-        canStepPrev={selectedTrackIndex > 0 || playbackPositionMs >= 3000}
-        canStepNext={selectedTrackIndex >= 0 && selectedTrackIndex < visibleTracks.length - 1}
+        canStepPrev={
+          playbackPositionMs >= 3000 ||
+          (playbackMode === "shuffle" ? visibleTracks.length > 1 : playbackMode === "repeat-all" ? visibleTracks.length > 0 : selectedTrackIndex > 0)
+        }
+        canStepNext={
+          playbackMode === "shuffle"
+            ? visibleTracks.length > 1
+            : playbackMode === "repeat-all"
+              ? visibleTracks.length > 0
+              : selectedTrackIndex >= 0 && selectedTrackIndex < visibleTracks.length - 1
+        }
         onStepPrev={() => stepTrack(-1)}
         onStepNext={() => stepTrack(1)}
         onTogglePlay={handleTogglePlay}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}
+        onCyclePlaybackMode={handleCyclePlaybackMode}
         onTogglePanel={handleTogglePanel}
       />
     </div>

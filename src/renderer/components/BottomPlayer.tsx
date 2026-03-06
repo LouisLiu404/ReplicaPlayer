@@ -8,14 +8,19 @@ import {
   PauseIcon,
   PlayIcon,
   PrevIcon,
+  RepeatIcon,
+  ShuffleIcon,
   VolumeIcon
 } from "./icons";
+
+type PlaybackMode = "normal" | "shuffle" | "repeat-all" | "repeat-one";
 
 interface BottomPlayerProps {
   track: TrackDetail | null;
   isPlaying: boolean;
   isExpanded: boolean;
   canPlay: boolean;
+  playbackMode: PlaybackMode;
   currentTimeMs: number;
   durationMs: number;
   volumePercent: number;
@@ -26,6 +31,7 @@ interface BottomPlayerProps {
   onTogglePlay: () => void;
   onSeek: (nextPositionMs: number) => void;
   onVolumeChange: (nextVolumePercent: number) => void;
+  onCyclePlaybackMode: () => void;
   onTogglePanel: () => void;
 }
 
@@ -34,6 +40,7 @@ export function BottomPlayer({
   isPlaying,
   isExpanded,
   canPlay,
+  playbackMode,
   currentTimeMs,
   durationMs,
   volumePercent,
@@ -44,9 +51,21 @@ export function BottomPlayer({
   onTogglePlay,
   onSeek,
   onVolumeChange,
+  onCyclePlaybackMode,
   onTogglePanel
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
+  const metaLine = track
+    ? track.artist || track.album || "Unknown artist"
+    : "Choose a track from the library.";
+  const modeLabel =
+    playbackMode === "shuffle"
+      ? "Shuffle"
+      : playbackMode === "repeat-all"
+        ? "Repeat current scope"
+        : playbackMode === "repeat-one"
+          ? "Repeat current track"
+          : "Playback mode off";
 
   return (
     <footer className="bottom-player">
@@ -63,7 +82,7 @@ export function BottomPlayer({
 
         <div className="bottom-player-copy">
           <strong>{track?.title ?? "Nothing selected"}</strong>
-          <span>{track ? `${track.artist} • ${track.album}` : "Choose a track from the library."}</span>
+          <span>{metaLine}</span>
         </div>
       </div>
 
@@ -83,6 +102,16 @@ export function BottomPlayer({
           </button>
           <button type="button" className="transport-icon-button" onClick={onStepNext} disabled={!canStepNext}>
             <NextIcon />
+          </button>
+          <button
+            type="button"
+            className={`transport-mode-button ${playbackMode !== "normal" ? "active" : ""}`}
+            onClick={onCyclePlaybackMode}
+            aria-label={modeLabel}
+            title={modeLabel}
+          >
+            {playbackMode === "shuffle" ? <ShuffleIcon /> : <RepeatIcon />}
+            {playbackMode === "repeat-one" ? <span className="transport-mode-badge">1</span> : null}
           </button>
         </div>
 
