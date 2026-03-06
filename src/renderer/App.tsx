@@ -13,28 +13,21 @@ import type {
   TrackDetail,
   TrackListItem
 } from "../shared/types";
+import { BottomPlayer } from "./components/BottomPlayer";
+import { ContextPanel } from "./components/ContextPanel";
+import { LibraryHero } from "./components/LibraryHero";
+import { NavigationRail } from "./components/NavigationRail";
+import { TopBar } from "./components/TopBar";
+import { TrackTable } from "./components/TrackTable";
+import type { ActivePanelTab, AvailabilityFilter } from "./components/ui-types";
+import { scanPhaseLabel, scanPhaseTone } from "./utils";
 
-function formatDuration(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function formatNumber(value: number | null, suffix: string): string {
-  return value == null ? "—" : `${value.toLocaleString()} ${suffix}`;
-}
-
-function availabilityLabel(value: TrackListItem["availability"]): string {
-  switch (value) {
-    case "available":
-      return "Ready";
-    case "offline":
-      return "Offline";
-    case "missing":
-      return "Missing";
-  }
-}
+type AvailabilityCounts = {
+  all: number;
+  available: number;
+  missing: number;
+  offline: number;
+};
 
 function playbackErrorMessage(format: string): string {
   if (format === "Ogg") {
@@ -75,21 +68,49 @@ function currentLyricIndex(lyrics: LyricPayload, positionMs: number): number {
   return match;
 }
 
+function filterTracks(tracks: TrackListItem[], filter: AvailabilityFilter): TrackListItem[] {
+  switch (filter) {
+    case "available":
+      return tracks.filter((track) => track.availability === "available");
+    case "missing":
+      return tracks.filter((track) => track.availability === "missing");
+    case "offline":
+      return tracks.filter((track) => track.availability === "offline");
+    case "all":
+      return tracks;
+  }
+}
+
+function countAvailabilities(tracks: TrackListItem[]): AvailabilityCounts {
+  return tracks.reduce<AvailabilityCounts>((counts, track) => {
+    counts.all += 1;
+    counts[track.availability] += 1;
+    return counts;
+  }, {
+    all: 0,
+    available: 0,
+    missing: 0,
+    offline: 0
+  });
+}
+
 export function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const rootsSectionRef = useRef<HTMLDivElement | null>(null);
   const playbackIntentRef = useRef(false);
   const trackObjectUrlRef = useRef<string | null>(null);
-  const artworkObjectUrlRef = useRef<string | null>(null);
+  const activePanelTabRef = useRef<ActivePanelTab>("details");
 
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
-  const [tracks, setTracks] = useState<TrackListItem[]>([]);
+  const [libraryTracks, setLibraryTracks] = useState<TrackListItem[]>([]);
   const [selectedRootId, setSelectedRootId] = useState<string>("");
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
   const [lyrics, setLyrics] = useState<LyricPayload>({ mode: "none", source: "none" });
   const [search, setSearch] = useState("");
-  const [includeMissing, setIncludeMissing] = useState(false);
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
   const [libraryMessage, setLibraryMessage] = useState("Choose a folder to start building your library.");
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -100,21 +121,19 @@ export function App() {
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
-  const [artworkDisplayUrl, setArtworkDisplayUrl] = useState<string | null>(null);
+  const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
+  const [isPanelOverlay, setIsPanelOverlay] = useState(() => window.matchMedia("(max-width: 1380px)").matches);
+  const [panelDrawerOpen, setPanelDrawerOpen] = useState(false);
+  const [volumePercent, setVolumePercent] = useState(78);
 
   const deferredSearch = useDeferredValue(search);
+
+  activePanelTabRef.current = activePanelTab;
 
   function clearTrackObjectUrl(): void {
     if (trackObjectUrlRef.current) {
       URL.revokeObjectURL(trackObjectUrlRef.current);
       trackObjectUrlRef.current = null;
-    }
-  }
-
-  function clearArtworkObjectUrl(): void {
-    if (artworkObjectUrlRef.current) {
-      URL.revokeObjectURL(artworkObjectUrlRef.current);
-      artworkObjectUrlRef.current = null;
     }
   }
 
@@ -127,6 +146,53 @@ export function App() {
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1380px)");
+
+    const syncOverlayState = (event?: MediaQueryListEvent) => {
+      const matches = event?.matches ?? mediaQuery.matches;
+      setIsPanelOverlay(matches);
+      if (!matches) {
+        setPanelDrawerOpen(false);
+      }
+    };
+
+    syncOverlayState();
+    mediaQuery.addEventListener("change", syncOverlayState);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncOverlayState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isTextInput =
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+      const wantsSearchFocus =
+        (!isTextInput && event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) ||
+        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k");
+
+      if (wantsSearchFocus) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+
+      if (event.key === "Escape" && panelDrawerOpen && isPanelOverlay) {
+        setPanelDrawerOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPanelOverlay, panelDrawerOpen]);
 
   useEffect(() => {
     let ignore = false;
@@ -167,7 +233,7 @@ export function App() {
         const nextTracks = await window.library.queryTracks({
           search: deferredSearch,
           rootId: selectedRootId || undefined,
-          includeMissing
+          includeMissing: true
         });
 
         if (ignore) {
@@ -175,18 +241,15 @@ export function App() {
         }
 
         startTransition(() => {
-          setTracks(nextTracks);
-          setSelectedTrackId((current) => (
-            nextTracks.some((track) => track.id === current) ? current : (nextTracks[0]?.id ?? null)
-          ));
+          setLibraryTracks(nextTracks);
         });
 
         if (roots.length === 0) {
           setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
         } else if (nextTracks.length === 0) {
-          setLibraryMessage("No supported audio files were found yet. Add more folders or run a rescan.");
+          setLibraryMessage("No supported audio files were found in this view. Try another folder or a broader search.");
         } else {
-          setLibraryMessage(`${nextTracks.length} tracks indexed across ${roots.length} folder${roots.length === 1 ? "" : "s"}.`);
+          setLibraryMessage(`${nextTracks.length} tracks are available in the current library scope.`);
         }
       } catch (error) {
         if (!ignore) {
@@ -204,7 +267,20 @@ export function App() {
     return () => {
       ignore = true;
     };
-  }, [deferredSearch, includeMissing, reloadTick, roots.length, selectedRootId]);
+  }, [deferredSearch, reloadTick, roots.length, selectedRootId]);
+
+  const availabilityCounts = countAvailabilities(libraryTracks);
+  const visibleTracks = filterTracks(libraryTracks, availabilityFilter);
+  const selectedTrackIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
+  const queueTracks = selectedTrackIndex >= 0 ? visibleTracks.slice(selectedTrackIndex) : [];
+  const currentRoot = roots.find((root) => root.id === selectedRootId) ?? null;
+  const currentRootLabel = currentRoot?.displayName ?? "All folders";
+
+  useEffect(() => {
+    setSelectedTrackId((current) => (
+      visibleTracks.some((track) => track.id === current) ? current : (visibleTracks[0]?.id ?? null)
+    ));
+  }, [availabilityFilter, libraryTracks]);
 
   useEffect(() => {
     if (!selectedTrackId) {
@@ -332,47 +408,30 @@ export function App() {
   }, [selectedTrackId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let ignore = false;
-    const artworkUrl = trackDetail?.artworkUrl;
-
-    if (!artworkUrl) {
-      clearArtworkObjectUrl();
-      setArtworkDisplayUrl(null);
-      return () => {
-        controller.abort();
-      };
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
     }
 
-    const resolvedArtworkUrl = artworkUrl;
+    audio.volume = volumePercent / 100;
+    audio.muted = volumePercent === 0;
+  }, [volumePercent]);
 
-    async function loadArtwork(): Promise<void> {
-      try {
-        const objectUrl = await loadObjectUrl(resolvedArtworkUrl, controller.signal);
-        if (ignore) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-
-        clearArtworkObjectUrl();
-        artworkObjectUrlRef.current = objectUrl;
-        setArtworkDisplayUrl(objectUrl);
-      } catch (error) {
-        if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
-          clearArtworkObjectUrl();
-          setArtworkDisplayUrl(null);
-        }
-      }
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
     }
 
-    void loadArtwork();
-
-    return () => {
-      ignore = true;
-      controller.abort();
-      clearArtworkObjectUrl();
+    const handleVolumeChange = () => {
+      setVolumePercent(Math.round((audio.muted ? 0 : audio.volume) * 100));
     };
-  }, [trackDetail?.artworkUrl]);
+
+    audio.addEventListener("volumechange", handleVolumeChange);
+    return () => {
+      audio.removeEventListener("volumechange", handleVolumeChange);
+    };
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -383,6 +442,9 @@ export function App() {
     const handlePlay = () => {
       setIsPlaying(true);
       setPlaybackError(null);
+      if (activePanelTabRef.current !== "lyrics") {
+        setActivePanelTab("queue");
+      }
     };
     const handlePause = () => setIsPlaying(false);
     const handleLoadedMetadata = () => {
@@ -395,8 +457,8 @@ export function App() {
     };
     const handleEnded = () => {
       setIsPlaying(false);
-      const currentIndex = tracks.findIndex((track) => track.id === selectedTrackId);
-      const nextTrack = tracks[currentIndex + 1];
+      const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
+      const nextTrack = visibleTracks[currentIndex + 1];
       if (nextTrack) {
         setSelectedTrackId(nextTrack.id);
       } else {
@@ -426,7 +488,7 @@ export function App() {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [selectedTrackId, trackDetail, tracks]);
+  }, [selectedTrackId, trackDetail, visibleTracks]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -491,7 +553,6 @@ export function App() {
   useEffect(() => {
     return () => {
       clearTrackObjectUrl();
-      clearArtworkObjectUrl();
     };
   }, []);
 
@@ -550,15 +611,18 @@ export function App() {
       return;
     }
 
-    if (!selectedTrackId && tracks.length > 0) {
+    if (!selectedTrackId && visibleTracks.length > 0) {
       playbackIntentRef.current = true;
-      setSelectedTrackId(tracks[0].id);
+      setSelectedTrackId(visibleTracks[0].id);
       return;
     }
 
     if (audio.paused) {
       playbackIntentRef.current = true;
       setPlaybackError(null);
+      if (activePanelTabRef.current !== "lyrics") {
+        setActivePanelTab("queue");
+      }
       void audio.play().catch((error) => {
         playbackIntentRef.current = false;
         setPlaybackError(playbackRejectionMessage(trackDetail?.format ?? "", error));
@@ -570,275 +634,170 @@ export function App() {
     audio.pause();
   }
 
-  function handleSeek(event: React.ChangeEvent<HTMLInputElement>): void {
-    const nextPosition = Number.parseInt(event.target.value, 10);
-    setPlaybackPositionMs(nextPosition);
-    if (audioRef.current) {
-      audioRef.current.currentTime = nextPosition / 1000;
+  function handleSeek(nextPositionMs: number): void {
+    const audio = audioRef.current;
+    const maxDuration = Math.max(durationMs, trackDetail?.durationMs ?? 0, 1);
+    const clampedPosition = Math.min(Math.max(nextPositionMs, 0), maxDuration);
+    setPlaybackPositionMs(clampedPosition);
+    if (audio) {
+      audio.currentTime = clampedPosition / 1000;
     }
   }
 
   function stepTrack(direction: -1 | 1): void {
-    if (tracks.length === 0) {
+    if (visibleTracks.length === 0) {
       return;
     }
 
-    const currentIndex = tracks.findIndex((track) => track.id === selectedTrackId);
+    const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
     const targetIndex = currentIndex >= 0 ? currentIndex + direction : 0;
-    const targetTrack = tracks[targetIndex];
+    const targetTrack = visibleTracks[targetIndex];
     if (targetTrack) {
       setSelectedTrackId(targetTrack.id);
     }
   }
 
+  function handlePanelTabChange(tab: ActivePanelTab): void {
+    setActivePanelTab(tab);
+    if (isPanelOverlay) {
+      setPanelDrawerOpen(true);
+    }
+  }
+
+  function handleOpenNowPlaying(): void {
+    setActivePanelTab(isPlaying ? "queue" : "details");
+    if (isPanelOverlay) {
+      setPanelDrawerOpen(true);
+    }
+  }
+
+  function handleJumpToFolders(): void {
+    rootsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest"
+    });
+  }
+
+  function handleTogglePanel(): void {
+    if (!isPanelOverlay) {
+      return;
+    }
+
+    setPanelDrawerOpen((current) => !current);
+  }
+
+  function handleVolumeChange(nextVolumePercent: number): void {
+    const clampedVolume = Math.min(Math.max(nextVolumePercent, 0), 100);
+    setVolumePercent(clampedVolume);
+  }
+
+  function handleSetLyricRef(index: number, element: HTMLDivElement | null): void {
+    lyricRefs.current.set(index, element);
+  }
+
+  const statusLabel = scanPhaseLabel(scanProgress?.phase);
+  const statusTone = scanPhaseTone(scanProgress?.phase);
+  const statusDetail = scanProgress
+    ? `${scanProgress.processedFiles} / ${scanProgress.discoveredFiles} files`
+    : libraryMessage;
+
   return (
     <div className="app-shell">
       <audio ref={audioRef} />
 
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <p className="eyebrow">Replica Player</p>
-          <h1>Local library, persistent by default.</h1>
-          <p className="sidebar-copy">
-            Import folders once, keep metadata cached, and rescan only when your library changes.
-          </p>
-        </div>
+      <div className="app-workspace">
+        <NavigationRail
+          roots={roots}
+          selectedRootId={selectedRootId}
+          visibleTrackCount={visibleTracks.length}
+          rootSectionRef={rootsSectionRef}
+          onSelectRoot={setSelectedRootId}
+          onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
+          onJumpToFolders={handleJumpToFolders}
+          onOpenNowPlaying={handleOpenNowPlaying}
+        />
 
-        <div className="sidebar-actions">
-          <button className="primary-button" onClick={() => void handleAddRoots()}>
-            Add Folders
-          </button>
-          <button className="ghost-button" onClick={() => void handleRescan()} disabled={roots.length === 0}>
-            Rescan Library
-          </button>
-        </div>
-
-        <label className="search-field">
-          <span>Search</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Title, artist, album, file name"
+        <div className="app-main">
+          <TopBar
+            roots={roots}
+            search={search}
+            selectedRootId={selectedRootId}
+            searchInputRef={searchInputRef}
+            statusLabel={statusLabel}
+            statusTone={statusTone}
+            statusDetail={statusDetail}
+            onSearchChange={setSearch}
+            onSelectRoot={setSelectedRootId}
+            onAddRoots={() => void handleAddRoots()}
+            onRescan={() => void handleRescan()}
+            onTogglePanel={handleTogglePanel}
           />
-        </label>
 
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={includeMissing}
-            onChange={(event) => setIncludeMissing(event.target.checked)}
-          />
-          <span>Show missing tracks</span>
-        </label>
+          <main className="library-view">
+            <LibraryHero
+              currentRootLabel={currentRootLabel}
+              isLoading={isLoadingLibrary}
+              visibleTrackCount={visibleTracks.length}
+              filterCounts={availabilityCounts}
+              activeFilter={availabilityFilter}
+              libraryMessage={libraryMessage}
+              scanProgress={scanProgress}
+              onFilterChange={setAvailabilityFilter}
+            />
 
-        <div className="roots-panel">
-          <div className="section-heading">
-            <span>Library Roots</span>
-            <span>{roots.length}</span>
-          </div>
-          {roots.length === 0 ? (
-            <div className="empty-card">No folders added yet.</div>
-          ) : (
-            <div className="roots-list">
-              <button
-                className={`root-card ${selectedRootId === "" ? "selected" : ""}`}
-                onClick={() => setSelectedRootId("")}
-              >
-                <span>All folders</span>
-                <small>{tracks.length} visible tracks</small>
-              </button>
-              {roots.map((root) => (
-                <div
-                  key={root.id}
-                  className={`root-card ${selectedRootId === root.id ? "selected" : ""}`}
-                >
-                  <button className="root-select" onClick={() => setSelectedRootId(root.id)}>
-                    <span>{root.displayName}</span>
-                    <small>{root.status === "available" ? "Available" : "Offline"}</small>
-                  </button>
-                  <button
-                    className="danger-button"
-                    onClick={() => void handleRemoveRoot(root.id)}
-                    title={`Remove ${root.displayName}`}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+            {libraryError ? <div className="error-banner">{libraryError}</div> : null}
+            {playbackError ? <div className="error-banner">{playbackError}</div> : null}
+
+            <TrackTable
+              tracks={visibleTracks}
+              selectedTrackId={selectedTrackId}
+              hasRoots={roots.length > 0}
+              isLoading={isLoadingLibrary}
+              onAddRoots={() => void handleAddRoots()}
+              onSelectTrack={setSelectedTrackId}
+            />
+          </main>
         </div>
 
-        <div className="status-card">
-          <div className="section-heading">
-            <span>Status</span>
-            <span>{scanProgress?.phase ?? "idle"}</span>
-          </div>
-          <p>{libraryMessage}</p>
-          {scanProgress ? (
-            <small>
-              {scanProgress.processedFiles} processed / {scanProgress.discoveredFiles} discovered
-            </small>
-          ) : null}
-          {libraryError ? <p className="error-text">{libraryError}</p> : null}
-        </div>
-      </aside>
+        <ContextPanel
+          isOverlay={isPanelOverlay}
+          isOpen={!isPanelOverlay || panelDrawerOpen}
+          activeTab={activePanelTab}
+          selectedTrackId={selectedTrackId}
+          queueTracks={queueTracks}
+          trackDetail={trackDetail}
+          lyrics={lyrics}
+          activeLyricLine={activeLyricLine}
+          onClose={() => setPanelDrawerOpen(false)}
+          onSelectTrack={setSelectedTrackId}
+          onTabChange={handlePanelTabChange}
+          setLyricRef={handleSetLyricRef}
+        />
+      </div>
 
-      <main className="library-panel">
-        <header className="panel-header">
-          <div>
-            <p className="eyebrow">Library</p>
-            <h2>{isLoadingLibrary ? "Loading…" : `${tracks.length} Tracks`}</h2>
-          </div>
-          <div className="player-controls">
-            <button className="transport-button" onClick={() => stepTrack(-1)} disabled={tracks.length === 0}>
-              Prev
-            </button>
-            <button className="transport-button primary" onClick={handleTogglePlay} disabled={tracks.length === 0}>
-              {isPlaying ? "Pause" : "Play"}
-            </button>
-            <button className="transport-button" onClick={() => stepTrack(1)} disabled={tracks.length === 0}>
-              Next
-            </button>
-          </div>
-        </header>
+      {isPanelOverlay ? (
+        <button
+          type="button"
+          className={`panel-backdrop ${panelDrawerOpen ? "open" : ""}`}
+          onClick={() => setPanelDrawerOpen(false)}
+          aria-label="Close side panel"
+        />
+      ) : null}
 
-        <div className="playback-strip">
-          <div className="playback-meta">
-            <strong>{trackDetail?.title ?? "Nothing selected"}</strong>
-            <span>
-              {trackDetail ? `${trackDetail.artist} • ${trackDetail.album}` : "Choose a track to begin playback"}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(durationMs, trackDetail?.durationMs ?? 0, 1)}
-            value={Math.min(playbackPositionMs, Math.max(durationMs, trackDetail?.durationMs ?? 0, 1))}
-            onChange={handleSeek}
-            disabled={!selectedTrackId}
-          />
-          <div className="time-row">
-            <span>{formatDuration(playbackPositionMs)}</span>
-            <span>{formatDuration(durationMs || trackDetail?.durationMs || 0)}</span>
-          </div>
-        </div>
-
-        {playbackError ? <div className="error-banner">{playbackError}</div> : null}
-
-        <div className="track-list">
-          {tracks.length === 0 ? (
-            <div className="empty-state">
-              <h3>Nothing to play yet.</h3>
-              <p>Add folders containing MP3, FLAC, or Ogg audio files.</p>
-            </div>
-          ) : (
-            tracks.map((track) => (
-              <button
-                key={track.id}
-                className={`track-row ${selectedTrackId === track.id ? "active" : ""}`}
-                onClick={() => setSelectedTrackId(track.id)}
-              >
-                <div className="track-row-main">
-                  <strong>{track.title}</strong>
-                  <span>{track.artist}</span>
-                </div>
-                <div className="track-row-meta">
-                  <span>{track.album}</span>
-                  <small>{track.format}</small>
-                </div>
-                <div className="track-row-status">
-                  <span>{availabilityLabel(track.availability)}</span>
-                  <small>{formatDuration(track.durationMs)}</small>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </main>
-
-      <section className="detail-panel">
-        <div className="artwork-card">
-          {artworkDisplayUrl ? (
-            <img src={artworkDisplayUrl} alt={trackDetail?.title ?? "Artwork"} className="artwork-image" />
-          ) : (
-            <div className="artwork-placeholder">No Art</div>
-          )}
-        </div>
-
-        <div className="metadata-card">
-          <p className="eyebrow">Now Playing</p>
-          <h2>{trackDetail?.title ?? "No track selected"}</h2>
-          <p className="metadata-subtitle">
-            {trackDetail ? `${trackDetail.artist} • ${trackDetail.album}` : "Select a track from the library."}
-          </p>
-
-          <div className="metadata-grid">
-            <div>
-              <span>Format</span>
-              <strong>{trackDetail?.format ?? "—"}</strong>
-            </div>
-            <div>
-              <span>Bitrate</span>
-              <strong>{formatNumber(trackDetail?.bitrate ?? null, "bps")}</strong>
-            </div>
-            <div>
-              <span>Sample Rate</span>
-              <strong>{formatNumber(trackDetail?.sampleRate ?? null, "Hz")}</strong>
-            </div>
-            <div>
-              <span>Bit Depth</span>
-              <strong>{formatNumber(trackDetail?.bitDepth ?? null, "bit")}</strong>
-            </div>
-            <div>
-              <span>Track / Disc</span>
-              <strong>{trackDetail ? `${trackDetail.trackNo ?? "—"} / ${trackDetail.discNo ?? "—"}` : "—"}</strong>
-            </div>
-            <div>
-              <span>Year</span>
-              <strong>{trackDetail?.year ?? "—"}</strong>
-            </div>
-          </div>
-
-          <div className="path-block">
-            <span>File</span>
-            <strong>{trackDetail?.fileName ?? "—"}</strong>
-            <small>{trackDetail?.path ?? ""}</small>
-          </div>
-        </div>
-
-        <div className="lyrics-card">
-          <div className="section-heading">
-            <span>Lyrics</span>
-            <span>{lyrics.source}</span>
-          </div>
-
-          {lyrics.mode === "none" ? (
-            <div className="empty-card">No embedded or adjacent local lyrics were found for this track.</div>
-          ) : null}
-
-          {lyrics.mode === "plain" ? (
-            <pre className="plain-lyrics">{lyrics.text}</pre>
-          ) : null}
-
-          {lyrics.mode === "synced" ? (
-            <div className="synced-lyrics">
-              {lyrics.lines.map((line, index) => (
-                <div
-                  key={`${line.startMs}-${index}`}
-                  ref={(element) => {
-                    lyricRefs.current.set(index, element);
-                  }}
-                  className={`lyric-line ${index === activeLyricLine ? "active" : ""}`}
-                >
-                  {line.text || "…"}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <BottomPlayer
+        track={trackDetail}
+        isPlaying={isPlaying}
+        currentTimeMs={playbackPositionMs}
+        durationMs={durationMs || trackDetail?.durationMs || 0}
+        volumePercent={volumePercent}
+        canStepPrev={selectedTrackIndex > 0}
+        canStepNext={selectedTrackIndex >= 0 && selectedTrackIndex < visibleTracks.length - 1}
+        onStepPrev={() => stepTrack(-1)}
+        onStepNext={() => stepTrack(1)}
+        onTogglePlay={handleTogglePlay}
+        onSeek={handleSeek}
+        onVolumeChange={handleVolumeChange}
+      />
     </div>
   );
 }
