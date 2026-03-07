@@ -1,4 +1,7 @@
+import type { CSSProperties } from "react";
+
 import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/types";
+import type { StreamerVars } from "../streamer";
 import {
   availabilityDescription,
   formatBitDepthCompact,
@@ -18,6 +21,8 @@ interface ExpandedPlayerProps {
   trackDetail: TrackDetail | null;
   lyrics: LyricPayload;
   activeLyricLine: number;
+  streamerVars: StreamerVars;
+  isPlaying: boolean;
   onSelectTrack: (trackId: string) => void;
   onTabChange: (tab: ActivePanelTab) => void;
   setLyricRef: (index: number, element: HTMLDivElement | null) => void;
@@ -30,12 +35,35 @@ const TABS: Array<{ id: ActivePanelTab; label: string }> = [
 ];
 
 function splitLyricParts(text: string): string[] {
-  const parts = text
+  const normalized = text.trim();
+  if (!normalized) {
+    return ["…"];
+  }
+
+  const lineBreakParts = normalized
     .split(/\r?\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
 
-  return parts.length > 0 ? parts : ["…"];
+  if (lineBreakParts.length > 1) {
+    return lineBreakParts;
+  }
+
+  const latinThenCjk = normalized.match(
+    /^(.+?\p{Script=Latin}[\p{Script=Latin}\p{Number}\p{Punctuation}\p{Symbol}\s]*?)\s+([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}].+)$/u
+  );
+  if (latinThenCjk) {
+    return [latinThenCjk[1].trim(), latinThenCjk[2].trim()];
+  }
+
+  const cjkThenLatin = normalized.match(
+    /^([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Punctuation}\s]+)\s+(.+?\p{Script=Latin}.+)$/u
+  );
+  if (cjkThenLatin) {
+    return [cjkThenLatin[1].trim(), cjkThenLatin[2].trim()];
+  }
+
+  return [normalized];
 }
 
 export function ExpandedPlayer({
@@ -45,6 +73,8 @@ export function ExpandedPlayer({
   trackDetail,
   lyrics,
   activeLyricLine,
+  streamerVars,
+  isPlaying,
   onSelectTrack,
   onTabChange,
   setLyricRef
@@ -156,7 +186,13 @@ export function ExpandedPlayer({
                   icon={<LyricsIcon className="empty-state-glyph" />}
                 />
               ) : lyrics.mode === "plain" ? (
-                <section className="lyrics-stage">
+                <section
+                  className="lyrics-stage"
+                  style={{
+                    ...streamerVars,
+                    "--streamer-play-state": isPlaying ? "running" : "paused"
+                  } as CSSProperties}
+                >
                   <div className="lyrics-stage-head">
                     <div className="context-meta-row">
                       <span>{lyricsSourceLabel(lyrics.source)}</span>
@@ -169,7 +205,13 @@ export function ExpandedPlayer({
                   </div>
                 </section>
               ) : (
-                <section className="lyrics-stage">
+                <section
+                  className="lyrics-stage"
+                  style={{
+                    ...streamerVars,
+                    "--streamer-play-state": isPlaying ? "running" : "paused"
+                  } as CSSProperties}
+                >
                   <div className="lyrics-stage-head">
                     <div className="context-meta-row">
                       <span>{lyricsSourceLabel(lyrics.source)}</span>

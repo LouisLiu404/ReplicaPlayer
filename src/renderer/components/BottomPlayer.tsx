@@ -87,89 +87,91 @@ export function BottomPlayer({
         />
       </div>
 
-      <div className="bottom-player-current">
-        <button
-          type="button"
-          className="bottom-player-art-button"
-          onClick={onTogglePanel}
-          disabled={!track}
-          aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
-        >
-          <div className="bottom-player-art">
-            {track?.artworkUrl ? (
-              <img src={track.artworkUrl} alt={track.title} className="bottom-player-image" />
-            ) : (
-              <div className="bottom-player-fallback">
-                <DiscIcon className="bottom-player-glyph" />
-              </div>
-            )}
+      <div className="bottom-player-layout">
+        <div className="bottom-player-current">
+          <button
+            type="button"
+            className="bottom-player-art-button"
+            onClick={onTogglePanel}
+            disabled={!track}
+            aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
+          >
+            <div className="bottom-player-art">
+              {track?.artworkUrl ? (
+                <img src={track.artworkUrl} alt={track.title} className="bottom-player-image" />
+              ) : (
+                <div className="bottom-player-fallback">
+                  <DiscIcon className="bottom-player-glyph" />
+                </div>
+              )}
+            </div>
+          </button>
+
+          <div className="bottom-player-copy">
+            <strong>{track?.title ?? "Nothing selected"}</strong>
+            <span>{metaLine}</span>
           </div>
-        </button>
-
-        <div className="bottom-player-copy">
-          <strong>{track?.title ?? "Nothing selected"}</strong>
-          <span>{metaLine}</span>
         </div>
-      </div>
 
-      <div className="bottom-player-center">
-        <div className="transport-row">
-          <button type="button" className="transport-icon-button" onClick={onStepPrev} disabled={!canStepPrev}>
-            <PrevIcon />
-          </button>
+        <div className="bottom-player-center">
+          <div className="transport-row">
+            <button type="button" className="transport-icon-button" onClick={onStepPrev} disabled={!canStepPrev}>
+              <PrevIcon />
+            </button>
+            <button
+              type="button"
+              className="transport-play-button"
+              onClick={onTogglePlay}
+              disabled={!track || !canPlay}
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+            </button>
+            <button type="button" className="transport-icon-button" onClick={onStepNext} disabled={!canStepNext}>
+              <NextIcon />
+            </button>
+            <button
+              type="button"
+              className="transport-mode-button active"
+              onClick={onCyclePlaybackMode}
+              aria-label={modeLabel}
+              title={modeLabel}
+            >
+              {playbackMode === "shuffle" ? <ShuffleIcon /> : <RepeatIcon />}
+              {playbackMode === "repeat-one" ? <span className="transport-mode-badge">1</span> : null}
+            </button>
+          </div>
+        </div>
+
+        <div className="bottom-player-trailing">
+          <div className="volume-control">
+            <VolumeIcon className="volume-icon" />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={volumePercent}
+              onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
+              aria-label="Volume"
+            />
+          </div>
+
+          <div className="bottom-player-meta">
+            <span>{track?.format ?? "Local Library"}</span>
+            <strong>{track ? formatDuration(totalDuration) : "0:00"}</strong>
+          </div>
+
           <button
             type="button"
-            className="transport-play-button"
-            onClick={onTogglePlay}
-            disabled={!track || !canPlay}
-            aria-label={isPlaying ? "Pause" : "Play"}
+            className="panel-expand-button"
+            onClick={onTogglePanel}
+            disabled={!track}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
           >
-            {isPlaying ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          <button type="button" className="transport-icon-button" onClick={onStepNext} disabled={!canStepNext}>
-            <NextIcon />
-          </button>
-          <button
-            type="button"
-            className="transport-mode-button active"
-            onClick={onCyclePlaybackMode}
-            aria-label={modeLabel}
-            title={modeLabel}
-          >
-            {playbackMode === "shuffle" ? <ShuffleIcon /> : <RepeatIcon />}
-            {playbackMode === "repeat-one" ? <span className="transport-mode-badge">1</span> : null}
+            {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
           </button>
         </div>
-      </div>
-
-      <div className="bottom-player-trailing">
-        <div className="volume-control">
-          <VolumeIcon className="volume-icon" />
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={volumePercent}
-            onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
-            aria-label="Volume"
-          />
-        </div>
-
-        <div className="bottom-player-meta">
-          <span>{track?.format ?? "Local Library"}</span>
-          <strong>{track ? formatDuration(totalDuration) : "0:00"}</strong>
-        </div>
-
-        <button
-          type="button"
-          className="panel-expand-button"
-          onClick={onTogglePanel}
-          disabled={!track}
-          aria-expanded={isExpanded}
-          aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
-        >
-          {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
-        </button>
       </div>
 
       <div className="player-time-row" aria-hidden={!track}>

@@ -67,6 +67,7 @@ function mapRoot(row: Record<string, unknown>): LibraryRoot {
     id: String(row.id),
     path: String(row.path),
     displayName: String(row.display_name),
+    trackCount: Number(row.track_count ?? 0),
     status: row.status as LibraryRootStatus,
     addedAt: String(row.added_at),
     lastScanAt: (row.last_scan_at as string | null) ?? null,
@@ -183,9 +184,19 @@ export class LibraryRepository {
 
   getRoots(): LibraryRoot[] {
     const statement = this.db.prepare(`
-      SELECT id, path, display_name, status, added_at, last_scan_at, last_error
+      SELECT
+        library_roots.id,
+        library_roots.path,
+        library_roots.display_name,
+        library_roots.status,
+        library_roots.added_at,
+        library_roots.last_scan_at,
+        library_roots.last_error,
+        COUNT(tracks.id) AS track_count
       FROM library_roots
-      ORDER BY lower(display_name), lower(path)
+      LEFT JOIN tracks ON tracks.root_id = library_roots.id
+      GROUP BY library_roots.id
+      ORDER BY lower(library_roots.display_name), lower(library_roots.path)
     `);
 
     return (statement.all() as Record<string, unknown>[]).map(mapRoot);
@@ -193,9 +204,19 @@ export class LibraryRepository {
 
   getRootByPath(rootPath: string): LibraryRoot | null {
     const statement = this.db.prepare(`
-      SELECT id, path, display_name, status, added_at, last_scan_at, last_error
+      SELECT
+        library_roots.id,
+        library_roots.path,
+        library_roots.display_name,
+        library_roots.status,
+        library_roots.added_at,
+        library_roots.last_scan_at,
+        library_roots.last_error,
+        COUNT(tracks.id) AS track_count
       FROM library_roots
-      WHERE path = ?
+      LEFT JOIN tracks ON tracks.root_id = library_roots.id
+      WHERE library_roots.path = ?
+      GROUP BY library_roots.id
       LIMIT 1
     `);
 
@@ -205,9 +226,19 @@ export class LibraryRepository {
 
   getRoot(rootId: string): LibraryRoot | null {
     const statement = this.db.prepare(`
-      SELECT id, path, display_name, status, added_at, last_scan_at, last_error
+      SELECT
+        library_roots.id,
+        library_roots.path,
+        library_roots.display_name,
+        library_roots.status,
+        library_roots.added_at,
+        library_roots.last_scan_at,
+        library_roots.last_error,
+        COUNT(tracks.id) AS track_count
       FROM library_roots
-      WHERE id = ?
+      LEFT JOIN tracks ON tracks.root_id = library_roots.id
+      WHERE library_roots.id = ?
+      GROUP BY library_roots.id
       LIMIT 1
     `);
 

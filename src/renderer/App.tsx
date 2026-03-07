@@ -29,6 +29,11 @@ import {
   readStoredPlaybackMode,
   type PlaybackMode
 } from "./playback";
+import {
+  DEFAULT_STREAMER_VARS,
+  extractStreamerVars,
+  type StreamerVars
+} from "./streamer";
 
 type AvailabilityCounts = {
   all: number;
@@ -177,6 +182,7 @@ export function App() {
   const trackObjectUrlRef = useRef<string | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
+  const streamerCacheRef = useRef(new Map<string, StreamerVars>());
 
   const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
@@ -185,12 +191,12 @@ export function App() {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
   const [lyrics, setLyrics] = useState<LyricPayload>({ mode: "none", source: "none" });
-  const [allFoldersTrackCount, setAllFoldersTrackCount] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
   const [libraryMessage, setLibraryMessage] = useState("Choose a folder to start building your library.");
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [hasLoadedRoots, setHasLoadedRoots] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
@@ -205,6 +211,7 @@ export function App() {
   );
   const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
   const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
+  const [streamerVars, setStreamerVars] = useState<StreamerVars>(DEFAULT_STREAMER_VARS);
 
   const deferredSearch = useDeferredValue(search);
 
@@ -269,8 +276,10 @@ export function App() {
         startTransition(() => {
           setRoots(nextRoots);
         });
+        setHasLoadedRoots(true);
       } catch (error) {
         if (!ignore) {
+          setHasLoadedRoots(true);
           setLibraryError(error instanceof Error ? error.message : "Unable to load library roots");
         }
       }
@@ -298,9 +307,6 @@ export function App() {
           startTransition(() => {
             setLibraryTracks(cachedTracks);
           });
-          if (!selectedRootId && deferredSearch.trim().length === 0) {
-            setAllFoldersTrackCount(cachedTracks.length);
-          }
           if (roots.length === 0) {
             setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
           } else if (cachedTracks.length === 0) {
@@ -328,9 +334,6 @@ export function App() {
           setLibraryTracks(nextTracks);
         });
         trackQueryCacheRef.current.set(queryKey, nextTracks);
-        if (!selectedRootId && deferredSearch.trim().length === 0) {
-          setAllFoldersTrackCount(nextTracks.length);
-        }
 
         if (roots.length === 0) {
           setLibraryMessage("Choose one or more music folders. Replica Player keeps them indexed between launches.");
@@ -367,6 +370,9 @@ export function App() {
   const queueTracks = selectedTrackIndex >= 0 ? visibleTracks.slice(selectedTrackIndex) : [];
   const currentRoot = roots.find((root) => root.id === selectedRootId) ?? null;
   const currentRootLabel = currentRoot?.displayName ?? "All folders";
+  const allFoldersTrackCount = hasLoadedRoots
+    ? roots.reduce((total, root) => total + root.trackCount, 0)
+    : null;
 
   useEffect(() => {
     if (!selectedTrackId && visibleTracks.length > 0) {
@@ -604,6 +610,43 @@ export function App() {
       // Ignore storage failures; runtime playback mode still works.
     }
   }, [playbackMode]);
+
+  useEffect(() => {
+    const artworkUrl = trackDetail?.artworkUrl;
+    if (!artworkUrl) {
+      setStreamerVars(DEFAULT_STREAMER_VARS);
+      return;
+    }
+
+    const cached = streamerCacheRef.current.get(artworkUrl);
+    if (cached) {
+      setStreamerVars(cached);
+      return;
+    }
+
+    const controller = new AbortController();
+    let ignore = false;
+
+    void extractStreamerVars(artworkUrl, controller.signal)
+      .then((nextVars) => {
+        if (ignore) {
+          return;
+        }
+
+        streamerCacheRef.current.set(artworkUrl, nextVars);
+        setStreamerVars(nextVars);
+      })
+      .catch(() => {
+        if (!ignore) {
+          setStreamerVars(DEFAULT_STREAMER_VARS);
+        }
+      });
+
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
+  }, [trackDetail?.artworkUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1137,6 +1180,8 @@ export function App() {
                 trackDetail={trackDetail}
                 lyrics={lyrics}
                 activeLyricLine={activeLyricLine}
+                streamerVars={streamerVars}
+                isPlaying={isPlaying}
                 onSelectTrack={setSelectedTrackId}
                 onTabChange={handlePanelTabChange}
                 setLyricRef={handleSetLyricRef}

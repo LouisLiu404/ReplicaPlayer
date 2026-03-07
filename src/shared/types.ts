@@ -12,6 +12,7 @@ export interface LibraryRoot {
   id: string;
   path: string;
   displayName: string;
+  trackCount: number;
   status: LibraryRootStatus;
   addedAt: string;
   lastScanAt: string | null;

@@ -34,7 +34,6 @@ export function NavigationRail({
       <div className="rail-roots">
         <div className="rail-section-header">
           <span>Folders</span>
-          <strong>{roots.length}</strong>
         </div>
 
         <button
@@ -61,7 +60,7 @@ export function NavigationRail({
                 title={root.path}
               >
                 <strong>{root.displayName}</strong>
-                <small>{root.status === "available" ? "Available" : "Unavailable"}</small>
+                <small>{`${root.trackCount} ${root.trackCount === 1 ? "track" : "tracks"}`}</small>
               </button>
             ))}
           </div>

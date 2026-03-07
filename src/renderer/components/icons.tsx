@@ -88,7 +88,13 @@ export function ReplicaWordmark(props: IconProps) {
   const bottomSliceId = `${iconId}-bottom-slice`;
 
   return (
-    <svg viewBox="0 0 600 200" fill="none" aria-hidden="true" {...props}>
+    <svg
+      viewBox="0 0 600 200"
+      fill="none"
+      preserveAspectRatio="xMinYMid meet"
+      aria-hidden="true"
+      {...props}
+    >
       <defs>
         <linearGradient id={orangeGradId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#ff8a00" />
@@ -103,7 +109,7 @@ export function ReplicaWordmark(props: IconProps) {
         </clipPath>
       </defs>
 
-      <g transform="translate(-24 0)">
+      <g transform="translate(-44 0)">
         <g clipPath={`url(#${bottomSliceId})`}>
           <text
             x="315"

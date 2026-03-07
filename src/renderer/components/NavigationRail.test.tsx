@@ -15,6 +15,7 @@ const ROOTS: LibraryRoot[] = [
     id: "root-1",
     path: "/Users/liuyike/Music/古风DJ",
     displayName: "古风DJ",
+    trackCount: 26,
     status: "available",
     addedAt: "2026-03-06T09:00:00.000Z",
     lastScanAt: "2026-03-06T09:01:00.000Z",
