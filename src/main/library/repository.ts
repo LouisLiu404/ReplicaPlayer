@@ -7,7 +7,8 @@ import type {
   TrackAvailability,
   TrackDetail,
   TrackListItem,
-  TrackQuery
+  TrackQuery,
+  TrackSortOption
 } from "../../shared/types";
 
 interface StoredTrackRecord {
@@ -119,6 +120,44 @@ function mapTrackDetail(row: Record<string, unknown>): TrackDetail {
   };
 }
 
+function trackSortOrderClause(sort: TrackSortOption | undefined): string {
+  switch (sort) {
+    case "title-desc":
+      return `
+        ORDER BY
+          title COLLATE NOCASE DESC,
+          artist COLLATE NOCASE ASC,
+          album COLLATE NOCASE ASC,
+          IFNULL(disc_no, 0) ASC,
+          IFNULL(track_no, 0) ASC
+      `;
+    case "modified-asc":
+      return `
+        ORDER BY
+          mtime_ms ASC,
+          title COLLATE NOCASE ASC,
+          artist COLLATE NOCASE ASC
+      `;
+    case "modified-desc":
+      return `
+        ORDER BY
+          mtime_ms DESC,
+          title COLLATE NOCASE ASC,
+          artist COLLATE NOCASE ASC
+      `;
+    case "title-asc":
+    default:
+      return `
+        ORDER BY
+          title COLLATE NOCASE ASC,
+          artist COLLATE NOCASE ASC,
+          album COLLATE NOCASE ASC,
+          IFNULL(disc_no, 0) ASC,
+          IFNULL(track_no, 0) ASC
+      `;
+  }
+}
+
 export class LibraryRepository {
   private readonly db: DatabaseSync;
 
@@ -176,6 +215,21 @@ export class LibraryRepository {
 
       CREATE INDEX IF NOT EXISTS idx_tracks_root_id ON tracks(root_id);
       CREATE INDEX IF NOT EXISTS idx_tracks_title_artist_album ON tracks(title, artist, album);
+      CREATE INDEX IF NOT EXISTS idx_tracks_title_sort ON tracks(
+        title COLLATE NOCASE,
+        artist COLLATE NOCASE,
+        album COLLATE NOCASE,
+        disc_no,
+        track_no
+      );
+      CREATE INDEX IF NOT EXISTS idx_tracks_root_title_sort ON tracks(
+        root_id,
+        title COLLATE NOCASE,
+        artist COLLATE NOCASE,
+        album COLLATE NOCASE,
+        disc_no,
+        track_no
+      );
       CREATE INDEX IF NOT EXISTS idx_tracks_sort ON tracks(
         artist COLLATE NOCASE,
         album COLLATE NOCASE,
@@ -190,6 +244,17 @@ export class LibraryRepository {
         disc_no,
         track_no,
         title COLLATE NOCASE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tracks_mtime_sort ON tracks(
+        mtime_ms,
+        title COLLATE NOCASE,
+        artist COLLATE NOCASE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tracks_root_mtime_sort ON tracks(
+        root_id,
+        mtime_ms,
+        title COLLATE NOCASE,
+        artist COLLATE NOCASE
       );
     `);
   }
@@ -448,16 +513,12 @@ export class LibraryRepository {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const orderClause = trackSortOrderClause(filter.sort);
     const statement = this.db.prepare(`
       SELECT id, title, artist, album, duration_ms, artwork_hash, ext, availability
       FROM tracks
       ${whereClause}
-      ORDER BY
-        artist COLLATE NOCASE,
-        album COLLATE NOCASE,
-        IFNULL(disc_no, 0),
-        IFNULL(track_no, 0),
-        title COLLATE NOCASE
+      ${orderClause}
     `);
 
     return (statement.all(...parameters) as Record<string, unknown>[]).map(mapTrackListItem);

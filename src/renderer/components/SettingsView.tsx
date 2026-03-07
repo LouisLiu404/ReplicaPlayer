@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 
-import type { LibraryRoot, ScanProgress } from "../../shared/types";
+import type { LibraryRoot, ScanProgress, TrackSortOption } from "../../shared/types";
 import type { ActivePanelTab } from "./ui-types";
 import { scanPhaseLabel } from "../utils";
 import { EmptyState } from "./EmptyState";
@@ -10,10 +10,12 @@ interface SettingsViewProps {
   roots: LibraryRoot[];
   scanProgress: ScanProgress | null;
   defaultExpandedTab: ActivePanelTab;
+  trackSort: TrackSortOption;
   onAddRoots: () => void;
   onRescan: () => void;
   onRemoveRoot: (rootId: string) => void;
   onDefaultExpandedTabChange: (tab: ActivePanelTab) => void;
+  onTrackSortChange: (sort: TrackSortOption) => void;
   onOpenExternal: (url: string) => void;
 }
 
@@ -24,16 +26,24 @@ export function SettingsView({
   roots,
   scanProgress,
   defaultExpandedTab,
+  trackSort,
   onAddRoots,
   onRescan,
   onRemoveRoot,
   onDefaultExpandedTabChange,
+  onTrackSortChange,
   onOpenExternal
 }: SettingsViewProps) {
   const expandedTabOptions: Array<{ id: ActivePanelTab; label: string; description: string }> = [
     { id: "queue", label: "Up Next", description: "Open the queue first." },
     { id: "lyrics", label: "Lyrics", description: "Open synced or plain lyrics first." },
     { id: "details", label: "Details", description: "Open technical metadata first." }
+  ];
+  const trackSortOptions: Array<{ id: TrackSortOption; label: string; description: string }> = [
+    { id: "title-asc", label: "Title A-Z", description: "Sort tracks alphabetically by title." },
+    { id: "title-desc", label: "Title Z-A", description: "Sort tracks in reverse alphabetical title order." },
+    { id: "modified-asc", label: "Oldest first", description: "Sort by file modified date from oldest to newest." },
+    { id: "modified-desc", label: "Newest first", description: "Sort by file modified date from newest to oldest." }
   ];
 
   function handleExternalLinkClick(
@@ -122,6 +132,29 @@ export function SettingsView({
               aria-checked={defaultExpandedTab === option.id}
               className={`settings-tab-option ${defaultExpandedTab === option.id ? "active" : ""}`}
               onClick={() => onDefaultExpandedTabChange(option.id)}
+            >
+              <strong>{option.label}</strong>
+              <span>{option.description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-section-card" aria-labelledby="track-sort-default">
+        <div className="settings-section-copy">
+          <h2 id="track-sort-default">Track list sort</h2>
+          <p>Choose the default ordering for library and folder track lists.</p>
+        </div>
+
+        <div className="settings-tab-option-row" role="radiogroup" aria-label="Track list sort">
+          {trackSortOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={trackSort === option.id}
+              className={`settings-tab-option ${trackSort === option.id ? "active" : ""}`}
+              onClick={() => onTrackSortChange(option.id)}
             >
               <strong>{option.label}</strong>
               <span>{option.description}</span>

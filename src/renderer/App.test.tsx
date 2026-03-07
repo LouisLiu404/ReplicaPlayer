@@ -12,6 +12,7 @@ import type {
   TrackListItem
 } from "../shared/types";
 import { DEFAULT_EXPANDED_TAB_STORAGE_KEY } from "./panel-preferences";
+import { TRACK_SORT_STORAGE_KEY } from "./sort-preferences";
 import { App } from "./App";
 
 vi.mock("./streamer", () => ({
@@ -153,16 +154,23 @@ vi.mock("./components/BottomPlayer", () => ({
 vi.mock("./components/SettingsView", () => ({
   SettingsView: ({
     defaultExpandedTab,
-    onDefaultExpandedTabChange
+    trackSort,
+    onDefaultExpandedTabChange,
+    onTrackSortChange
   }: {
     defaultExpandedTab: string;
+    trackSort: string;
     onDefaultExpandedTabChange: (tab: "queue" | "lyrics" | "details") => void;
+    onTrackSortChange: (sort: "title-asc" | "title-desc" | "modified-asc" | "modified-desc") => void;
   }) => (
     <div data-testid="settings-view">
       <div data-testid="settings-default-tab">{defaultExpandedTab}</div>
+      <div data-testid="settings-track-sort">{trackSort}</div>
       <button type="button" onClick={() => onDefaultExpandedTabChange("queue")}>Default Queue</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("lyrics")}>Default Lyrics</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("details")}>Default Details</button>
+      <button type="button" onClick={() => onTrackSortChange("title-desc")}>Sort Title Desc</button>
+      <button type="button" onClick={() => onTrackSortChange("modified-asc")}>Sort Modified Asc</button>
     </div>
   )
 }));
@@ -458,6 +466,28 @@ describe("App", () => {
 
     expect(rootOneCalls).toHaveLength(1);
     expect(mock.queryTracks).toHaveBeenCalledTimes(3);
+  });
+
+  it("persists track sort and requeries with the selected sort option", async () => {
+    const mock = await renderAppWithMock();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-track-sort").textContent).toBe("title-asc");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort Modified Asc" }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(TRACK_SORT_STORAGE_KEY)).toBe("modified-asc");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "All folders 2" }));
+
+    await waitFor(() => {
+      const lastCall = mock.queryTracks.mock.calls.at(-1)?.[0] as QueryArg | undefined;
+      expect(lastCall?.sort).toBe("modified-asc");
+    });
   });
 
   it("reuses cached track details and lyrics when returning to a previously selected track", async () => {

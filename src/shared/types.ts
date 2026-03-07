@@ -34,7 +34,14 @@ export interface TrackQuery {
   search?: string;
   rootId?: string;
   includeMissing?: boolean;
+  sort?: TrackSortOption;
 }
+
+export type TrackSortOption =
+  | "title-asc"
+  | "title-desc"
+  | "modified-asc"
+  | "modified-desc";
 
 export interface TrackListItem {
   id: string;

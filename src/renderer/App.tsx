@@ -13,7 +13,8 @@ import type {
   LyricPayload,
   ScanProgress,
   TrackDetail,
-  TrackListItem
+  TrackListItem,
+  TrackSortOption
 } from "../shared/types";
 import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
@@ -40,6 +41,11 @@ import {
   DEFAULT_EXPANDED_TAB_STORAGE_KEY,
   readStoredDefaultExpandedTab
 } from "./panel-preferences";
+import {
+  DEFAULT_TRACK_SORT,
+  readStoredTrackSort,
+  TRACK_SORT_STORAGE_KEY
+} from "./sort-preferences";
 import { calculatePulseLevel, smoothPulse } from "./visualizer";
 
 type AvailabilityCounts = {
@@ -83,8 +89,8 @@ function toScanFileLabel(filePath: string): string {
   return segments[segments.length - 1] || filePath;
 }
 
-function trackQueryCacheKey(rootId: string, search: string): string {
-  return `${rootId}::${search.trim().toLowerCase()}`;
+function trackQueryCacheKey(rootId: string, search: string, sort: TrackSortOption): string {
+  return `${rootId}::${search.trim().toLowerCase()}::${sort}`;
 }
 
 class ResourceRequestError extends Error {
@@ -210,6 +216,9 @@ export function App() {
   const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
   const [lyrics, setLyrics] = useState<LyricPayload>({ mode: "none", source: "none" });
   const [search, setSearch] = useState("");
+  const [trackSort, setTrackSort] = useState<TrackSortOption>(() =>
+    readStoredTrackSort(window.localStorage)
+  );
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(true);
   const [libraryMessage, setLibraryMessage] = useState("Choose a folder to start building your library.");
@@ -333,7 +342,7 @@ export function App() {
       setLibraryError(null);
       setLibraryMessage(`Loading ${selectedRootId ? "folder" : "library"}…`);
 
-      const queryKey = trackQueryCacheKey(selectedRootId, deferredSearch);
+      const queryKey = trackQueryCacheKey(selectedRootId, deferredSearch, trackSort);
       const cachedTracks = trackQueryCacheRef.current.get(queryKey);
       if (cachedTracks) {
         if (!ignore) {
@@ -356,7 +365,8 @@ export function App() {
         const nextTracks = await window.library.queryTracks({
           search: deferredSearch,
           rootId: selectedRootId || undefined,
-          includeMissing: true
+          includeMissing: true,
+          sort: trackSort
         });
 
         if (ignore) {
@@ -391,7 +401,7 @@ export function App() {
     return () => {
       ignore = true;
     };
-  }, [deferredSearch, reloadTick, roots.length, selectedRootId]);
+  }, [deferredSearch, reloadTick, roots.length, selectedRootId, trackSort]);
 
   useEffect(() => {
     trackQueryCacheRef.current.clear();
@@ -676,6 +686,14 @@ export function App() {
       // Ignore storage failures; runtime preference still works.
     }
   }, [defaultExpandedTab]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TRACK_SORT_STORAGE_KEY, trackSort);
+    } catch {
+      // Ignore storage failures; runtime preference still works.
+    }
+  }, [trackSort]);
 
   useEffect(() => {
     const artworkUrl = trackDetail?.artworkUrl;
@@ -1339,6 +1357,10 @@ export function App() {
     }
   }, [isPlayerExpanded]);
 
+  const handleTrackSortChange = useCallback((sort: TrackSortOption): void => {
+    setTrackSort(sort);
+  }, []);
+
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
   const selectedMissingTrack = trackDetail?.availability === "missing"
@@ -1415,10 +1437,12 @@ export function App() {
                 roots={roots}
                 scanProgress={scanProgress}
                 defaultExpandedTab={defaultExpandedTab}
+                trackSort={trackSort}
                 onAddRoots={() => void handleAddRoots()}
                 onRescan={() => void handleRescan()}
                 onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
                 onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
+                onTrackSortChange={handleTrackSortChange}
                 onOpenExternal={(url) => void window.system.openExternal(url)}
               />
             ) : (
