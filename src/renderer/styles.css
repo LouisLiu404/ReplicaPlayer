@@ -1891,6 +1891,12 @@ img {
   box-shadow: 0 -14px 32px rgba(0, 0, 0, 0.34);
   --player-progress: 0%;
   --volume-progress: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: paint;
+  will-change: transform, opacity;
 }
 
 .bottom-player-layout {
@@ -1924,6 +1930,21 @@ img {
     opacity 140ms ease,
     filter 140ms ease,
     transform 140ms ease;
+  will-change: opacity, filter, transform;
+}
+
+.bottom-player.settings-surface {
+  background: linear-gradient(180deg, rgba(12, 12, 15, 0.78), rgba(8, 8, 10, 0.86));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bottom-player.settings-surface::before {
+  inset: 18px 28% 20px;
+  filter:
+    blur(calc(52px + (var(--streamer-footer-pulse) * 18px)))
+    saturate(calc(136% + (var(--streamer-footer-pulse) * 14%)));
+  opacity: calc((var(--streamer-footer-opacity) * 0.98) * (1 + (var(--streamer-footer-pulse) * 0.42)));
 }
 
 .bottom-player-progress-shell {

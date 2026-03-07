@@ -21,6 +21,7 @@ interface BottomPlayerProps {
   track: TrackDetail | null;
   isPlaying: boolean;
   isExpanded: boolean;
+  isSettingsView: boolean;
   canPlay: boolean;
   playbackMode: PlaybackMode;
   currentTimeMs: number;
@@ -41,6 +42,7 @@ export function BottomPlayer({
   track,
   isPlaying,
   isExpanded,
+  isSettingsView,
   canPlay,
   playbackMode,
   currentTimeMs,
@@ -89,7 +91,7 @@ export function BottomPlayer({
 
   return (
     <footer
-      className="bottom-player"
+      className={`bottom-player ${isSettingsView ? "settings-surface" : ""}`}
       style={{
         "--player-progress": `${progressPercent * 100}%`,
         "--volume-progress": `${volumePercent}%`

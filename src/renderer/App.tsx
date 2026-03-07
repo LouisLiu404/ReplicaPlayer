@@ -1559,6 +1559,7 @@ export function App() {
         track={trackDetail}
         isPlaying={isPlaying}
         isExpanded={isPlayerExpanded}
+        isSettingsView={isSettingsView}
         canPlay={canPlaySelectedTrack}
         playbackMode={playbackMode}
         currentTimeMs={playbackPositionMs}
