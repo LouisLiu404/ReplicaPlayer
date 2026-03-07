@@ -1,10 +1,14 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import type { TrackListItem } from "../../shared/types";
+import { calculateVirtualWindow, type VirtualWindow } from "../virtual-list";
 import { availabilityLabel, formatDuration } from "../utils";
 import { EmptyState } from "./EmptyState";
 import { MusicNoteIcon } from "./icons";
 import type { AvailabilityFilter } from "./ui-types";
+
+const TRACK_ROW_HEIGHT = 76;
+const TRACK_ROW_OVERSCAN = 8;
 
 interface TrackTableProps {
   tracks: TrackListItem[];
@@ -13,6 +17,7 @@ interface TrackTableProps {
   isLoading: boolean;
   showLoadingOverlay: boolean;
   activeFilter: AvailabilityFilter;
+  scrollContainerRef: RefObject<HTMLElement | null>;
   onOpenSettings: () => void;
   onSelectTrack: (trackId: string) => void;
   onPlayTrack: (trackId: string) => void;
@@ -25,10 +30,87 @@ export const TrackTable = memo(function TrackTable({
   isLoading,
   showLoadingOverlay,
   activeFilter,
+  scrollContainerRef,
   onOpenSettings,
   onSelectTrack,
   onPlayTrack
 }: TrackTableProps) {
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [virtualWindow, setVirtualWindow] = useState<VirtualWindow>(() =>
+    calculateVirtualWindow({
+      itemCount: tracks.length,
+      itemHeight: TRACK_ROW_HEIGHT,
+      scrollOffset: 0,
+      viewportHeight: TRACK_ROW_HEIGHT * 14,
+      overscan: TRACK_ROW_OVERSCAN
+    })
+  );
+
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    const bodyElement = bodyRef.current;
+
+    if (!bodyElement) {
+      return;
+    }
+
+    const measure = () => {
+      const nextWindow = calculateVirtualWindow({
+        itemCount: tracks.length,
+        itemHeight: TRACK_ROW_HEIGHT,
+        scrollOffset: scrollContainer
+          ? scrollContainer.scrollTop - (
+            bodyElement.getBoundingClientRect().top -
+            scrollContainer.getBoundingClientRect().top +
+            scrollContainer.scrollTop
+          )
+          : 0,
+        viewportHeight: scrollContainer?.clientHeight ?? (TRACK_ROW_HEIGHT * 14),
+        overscan: TRACK_ROW_OVERSCAN
+      });
+
+      setVirtualWindow((current) => (
+        current.startIndex === nextWindow.startIndex &&
+        current.endIndex === nextWindow.endIndex &&
+        current.paddingTop === nextWindow.paddingTop &&
+        current.paddingBottom === nextWindow.paddingBottom
+      ) ? current : nextWindow);
+    };
+
+    let frame = 0;
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+    scrollContainer?.addEventListener("scroll", scheduleMeasure, { passive: true });
+    window.addEventListener("resize", scheduleMeasure);
+
+    const ResizeObserverCtor = window.ResizeObserver;
+    const resizeObserver = ResizeObserverCtor
+      ? new ResizeObserverCtor(() => {
+          scheduleMeasure();
+        })
+      : null;
+    resizeObserver?.observe(bodyElement);
+    if (scrollContainer) {
+      resizeObserver?.observe(scrollContainer);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scrollContainer?.removeEventListener("scroll", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      resizeObserver?.disconnect();
+    };
+  }, [scrollContainerRef, tracks.length]);
+
+  const renderedTracks = useMemo(
+    () => tracks.slice(virtualWindow.startIndex, virtualWindow.endIndex + 1),
+    [tracks, virtualWindow.endIndex, virtualWindow.startIndex]
+  );
+
   if (isLoading && tracks.length === 0) {
     return (
       <section className="loading-surface" aria-live="polite">
@@ -86,8 +168,15 @@ export const TrackTable = memo(function TrackTable({
         <span>Time</span>
       </div>
 
-      <div className="track-table-body">
-        {tracks.map((track, index) => (
+      <div className="track-table-body" ref={bodyRef}>
+        {virtualWindow.paddingTop > 0 ? (
+          <div
+            aria-hidden="true"
+            className="virtual-spacer"
+            style={{ height: `${virtualWindow.paddingTop}px` }}
+          />
+        ) : null}
+        {renderedTracks.map((track, index) => (
           <button
             key={track.id}
             type="button"
@@ -96,7 +185,7 @@ export const TrackTable = memo(function TrackTable({
             onDoubleClick={() => onPlayTrack(track.id)}
             aria-label={`Select ${track.title} by ${track.artist}`}
           >
-            <span className="track-index-cell">{index + 1}</span>
+            <span className="track-index-cell">{virtualWindow.startIndex + index + 1}</span>
 
             <div className="track-primary-cell">
               <div className="track-artwork">
@@ -130,6 +219,13 @@ export const TrackTable = memo(function TrackTable({
             <div className="track-duration-cell">{formatDuration(track.durationMs)}</div>
           </button>
         ))}
+        {virtualWindow.paddingBottom > 0 ? (
+          <div
+            aria-hidden="true"
+            className="virtual-spacer"
+            style={{ height: `${virtualWindow.paddingBottom}px` }}
+          />
+        ) : null}
       </div>
     </section>
   );

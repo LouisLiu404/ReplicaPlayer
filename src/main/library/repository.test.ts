@@ -110,4 +110,41 @@ describe("LibraryRepository.queryTracks sort", () => {
 
     repository.close();
   });
+
+  it("sorts Chinese titles by pinyin order for title sorts", () => {
+    const repository = createRepository();
+    repository.insertRoot({
+      id: "root-1",
+      path: "/music/root-1",
+      displayName: "Root 1",
+      addedAt: "2026-03-07T00:00:00.000Z"
+    });
+
+    repository.upsertTrack(createTrack({
+      id: "track-yong",
+      title: "咏春",
+      realPath: "/music/yong.flac",
+      fileName: "yong.flac"
+    }));
+    repository.upsertTrack(createTrack({
+      id: "track-hui",
+      title: "回马枪",
+      realPath: "/music/hui.flac",
+      fileName: "hui.flac"
+    }));
+    repository.upsertTrack(createTrack({
+      id: "track-luan",
+      title: "乱世书",
+      realPath: "/music/luan.flac",
+      fileName: "luan.flac"
+    }));
+
+    const ascending = repository.queryTracks({ sort: "title-asc" });
+    expect(ascending.map((track) => track.title)).toEqual(["回马枪", "乱世书", "咏春"]);
+
+    const descending = repository.queryTracks({ sort: "title-desc" });
+    expect(descending.map((track) => track.title)).toEqual(["咏春", "乱世书", "回马枪"]);
+
+    repository.close();
+  });
 });

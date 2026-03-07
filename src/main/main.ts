@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 
-import type { TrackQuery } from "../shared/types";
+import type { TrackQuery, TrackSortOption } from "../shared/types";
 import { LibraryService } from "./library/library-service";
 import { registerProtocols } from "./protocols";
 import { getProductionRendererEntryUrl } from "./renderer-paths";
@@ -71,11 +71,23 @@ function normalizeQuery(value: unknown): TrackQuery {
 
   const query = value as Record<string, unknown>;
 
+  const sort = typeof query.sort === "string" && isTrackSortOption(query.sort)
+    ? query.sort
+    : undefined;
+
   return {
     search: typeof query.search === "string" ? query.search : undefined,
     rootId: typeof query.rootId === "string" ? query.rootId : undefined,
-    includeMissing: typeof query.includeMissing === "boolean" ? query.includeMissing : undefined
+    includeMissing: typeof query.includeMissing === "boolean" ? query.includeMissing : undefined,
+    sort
   };
+}
+
+function isTrackSortOption(value: string): value is TrackSortOption {
+  return value === "title-asc" ||
+    value === "title-desc" ||
+    value === "modified-asc" ||
+    value === "modified-desc";
 }
 
 async function createMainWindow(): Promise<void> {

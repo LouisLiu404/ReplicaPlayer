@@ -37,6 +37,11 @@ interface StoredTrackRecord {
   lastIndexedAt: string;
 }
 
+const titleSortCollator = new Intl.Collator("zh-Hans-u-co-pinyin", {
+  sensitivity: "base",
+  numeric: true
+});
+
 export interface IndexedTrackState {
   id: string;
   realPath: string;
@@ -123,14 +128,7 @@ function mapTrackDetail(row: Record<string, unknown>): TrackDetail {
 function trackSortOrderClause(sort: TrackSortOption | undefined): string {
   switch (sort) {
     case "title-desc":
-      return `
-        ORDER BY
-          title COLLATE NOCASE DESC,
-          artist COLLATE NOCASE ASC,
-          album COLLATE NOCASE ASC,
-          IFNULL(disc_no, 0) ASC,
-          IFNULL(track_no, 0) ASC
-      `;
+      return "";
     case "modified-asc":
       return `
         ORDER BY
@@ -147,15 +145,49 @@ function trackSortOrderClause(sort: TrackSortOption | undefined): string {
       `;
     case "title-asc":
     default:
-      return `
-        ORDER BY
-          title COLLATE NOCASE ASC,
-          artist COLLATE NOCASE ASC,
-          album COLLATE NOCASE ASC,
-          IFNULL(disc_no, 0) ASC,
-          IFNULL(track_no, 0) ASC
-      `;
+      return "";
   }
+}
+
+function compareNullableNumbers(left: unknown, right: unknown): number {
+  const leftValue = left == null ? 0 : Number(left);
+  const rightValue = right == null ? 0 : Number(right);
+  return leftValue - rightValue;
+}
+
+function compareTitleRows(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+  direction: "asc" | "desc"
+): number {
+  const factor = direction === "asc" ? 1 : -1;
+
+  const titleComparison = titleSortCollator.compare(String(left.title), String(right.title));
+  if (titleComparison !== 0) {
+    return titleComparison * factor;
+  }
+
+  const artistComparison = titleSortCollator.compare(String(left.artist), String(right.artist));
+  if (artistComparison !== 0) {
+    return artistComparison * factor;
+  }
+
+  const albumComparison = titleSortCollator.compare(String(left.album), String(right.album));
+  if (albumComparison !== 0) {
+    return albumComparison * factor;
+  }
+
+  const discComparison = compareNullableNumbers(left.disc_no, right.disc_no);
+  if (discComparison !== 0) {
+    return discComparison * factor;
+  }
+
+  const trackComparison = compareNullableNumbers(left.track_no, right.track_no);
+  if (trackComparison !== 0) {
+    return trackComparison * factor;
+  }
+
+  return titleSortCollator.compare(String(left.id), String(right.id)) * factor;
 }
 
 export class LibraryRepository {
@@ -515,13 +547,30 @@ export class LibraryRepository {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const orderClause = trackSortOrderClause(filter.sort);
     const statement = this.db.prepare(`
-      SELECT id, title, artist, album, duration_ms, artwork_hash, ext, availability
+      SELECT
+        id,
+        title,
+        artist,
+        album,
+        duration_ms,
+        artwork_hash,
+        ext,
+        availability,
+        disc_no,
+        track_no
       FROM tracks
       ${whereClause}
       ${orderClause}
     `);
 
-    return (statement.all(...parameters) as Record<string, unknown>[]).map(mapTrackListItem);
+    const rows = statement.all(...parameters) as Record<string, unknown>[];
+    if (filter.sort === "title-desc") {
+      rows.sort((left, right) => compareTitleRows(left, right, "desc"));
+    } else if (!filter.sort || filter.sort === "title-asc") {
+      rows.sort((left, right) => compareTitleRows(left, right, "asc"));
+    }
+
+    return rows.map(mapTrackListItem);
   }
 
   getTrack(trackId: string): TrackDetail | null {

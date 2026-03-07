@@ -328,6 +328,13 @@ function createLibraryMock() {
 }
 
 beforeAll(() => {
+  Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+    configurable: true,
+    get() {
+      return HTMLMediaElement.HAVE_ENOUGH_DATA;
+    }
+  });
+
   Object.defineProperty(globalThis, "fetch", {
     configurable: true,
     value: vi.fn(async () => ({

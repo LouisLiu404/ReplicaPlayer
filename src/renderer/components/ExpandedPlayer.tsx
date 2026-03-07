@@ -1,7 +1,14 @@
-import type { CSSProperties } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
 import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/types";
 import type { StreamerVars } from "../streamer";
+import { calculateVirtualWindow, type VirtualWindow } from "../virtual-list";
 import {
   availabilityDescription,
   formatBitDepthCompact,
@@ -18,6 +25,7 @@ interface ExpandedPlayerProps {
   activeTab: ActivePanelTab;
   selectedTrackId: string | null;
   queueTracks: TrackListItem[];
+  queueStartIndex: number;
   trackDetail: TrackDetail | null;
   lyrics: LyricPayload;
   activeLyricLine: number;
@@ -34,6 +42,9 @@ const TABS: Array<{ id: ActivePanelTab; label: string }> = [
   { id: "lyrics", label: "Lyrics" },
   { id: "details", label: "Details" }
 ];
+
+const QUEUE_ROW_HEIGHT = 80;
+const QUEUE_OVERSCAN = 8;
 
 function splitLyricParts(text: string): string[] {
   const normalized = text.trim();
@@ -71,6 +82,7 @@ export function ExpandedPlayer({
   activeTab,
   selectedTrackId,
   queueTracks,
+  queueStartIndex,
   trackDetail,
   lyrics,
   activeLyricLine,
@@ -81,6 +93,82 @@ export function ExpandedPlayer({
   setLyricRef,
   setLyricsScrollRef
 }: ExpandedPlayerProps) {
+  const queueScrollRef = useRef<HTMLDivElement | null>(null);
+  const queueBaseIndex = queueStartIndex >= 0 ? queueStartIndex : -1;
+  const queueCount = queueBaseIndex >= 0 ? Math.max(0, queueTracks.length - queueBaseIndex) : 0;
+  const [queueWindow, setQueueWindow] = useState<VirtualWindow>(() =>
+    calculateVirtualWindow({
+      itemCount: queueCount,
+      itemHeight: QUEUE_ROW_HEIGHT,
+      scrollOffset: 0,
+      viewportHeight: QUEUE_ROW_HEIGHT * 10,
+      overscan: QUEUE_OVERSCAN
+    })
+  );
+
+  useEffect(() => {
+    if (activeTab !== "queue") {
+      return;
+    }
+
+    const scrollElement = queueScrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+
+    const measure = () => {
+      const nextWindow = calculateVirtualWindow({
+        itemCount: queueCount,
+        itemHeight: QUEUE_ROW_HEIGHT,
+        scrollOffset: scrollElement.scrollTop,
+        viewportHeight: scrollElement.clientHeight,
+        overscan: QUEUE_OVERSCAN
+      });
+
+      setQueueWindow((current) => (
+        current.startIndex === nextWindow.startIndex &&
+        current.endIndex === nextWindow.endIndex &&
+        current.paddingTop === nextWindow.paddingTop &&
+        current.paddingBottom === nextWindow.paddingBottom
+      ) ? current : nextWindow);
+    };
+
+    let frame = 0;
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+    scrollElement.addEventListener("scroll", scheduleMeasure, { passive: true });
+    window.addEventListener("resize", scheduleMeasure);
+
+    const ResizeObserverCtor = window.ResizeObserver;
+    const resizeObserver = ResizeObserverCtor
+      ? new ResizeObserverCtor(() => {
+          scheduleMeasure();
+        })
+      : null;
+    resizeObserver?.observe(scrollElement);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scrollElement.removeEventListener("scroll", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      resizeObserver?.disconnect();
+    };
+  }, [activeTab, queueCount]);
+
+  const renderedQueueRows = useMemo(() => {
+    if (queueCount === 0 || queueWindow.endIndex < queueWindow.startIndex) {
+      return [];
+    }
+
+    const absoluteStartIndex = queueBaseIndex + queueWindow.startIndex;
+    const absoluteEndIndex = queueBaseIndex + queueWindow.endIndex + 1;
+    return queueTracks.slice(absoluteStartIndex, absoluteEndIndex);
+  }, [queueBaseIndex, queueCount, queueTracks, queueWindow.endIndex, queueWindow.startIndex]);
+
   const stageLabels = trackDetail
     ? [
         trackDetail.format,
@@ -136,7 +224,7 @@ export function ExpandedPlayer({
 
           <div className="expanded-panel-body">
             {activeTab === "queue" ? (
-              queueTracks.length === 0 ? (
+              queueCount === 0 ? (
                 <EmptyState
                   compact
                   title="Queue is empty"
@@ -144,15 +232,24 @@ export function ExpandedPlayer({
                   icon={<QueueIcon className="empty-state-glyph" />}
                 />
               ) : (
-                <div className="expanded-scroll queue-list">
-                  {queueTracks.map((track, index) => (
+                <div ref={queueScrollRef} className="expanded-scroll queue-list">
+                  {queueWindow.paddingTop > 0 ? (
+                    <div
+                      aria-hidden="true"
+                      className="virtual-spacer"
+                      style={{ height: `${queueWindow.paddingTop}px` }}
+                    />
+                  ) : null}
+                  {renderedQueueRows.map((track, index) => (
                     <button
                       key={track.id}
                       type="button"
                       className={`queue-row ${selectedTrackId === track.id ? "active" : ""}`}
                       onClick={() => onSelectTrack(track.id)}
                     >
-                      <span className="queue-index">{index === 0 ? "Now" : index}</span>
+                      <span className="queue-index">
+                        {queueWindow.startIndex + index === 0 ? "Now" : queueWindow.startIndex + index}
+                      </span>
                       <div className="queue-artwork">
                         {track.artworkUrl ? (
                           <img
@@ -175,6 +272,13 @@ export function ExpandedPlayer({
                       <span className="queue-duration">{formatDuration(track.durationMs)}</span>
                     </button>
                   ))}
+                  {queueWindow.paddingBottom > 0 ? (
+                    <div
+                      aria-hidden="true"
+                      className="virtual-spacer"
+                      style={{ height: `${queueWindow.paddingBottom}px` }}
+                    />
+                  ) : null}
                 </div>
               )
             ) : null}

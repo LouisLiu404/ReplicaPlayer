@@ -25,6 +25,7 @@ import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
+import { currentLyricIndex, nextLyricDelayMs } from "./lyrics-timing";
 import { scrollLyricsContainer } from "./lyrics-scroll";
 import {
   cyclePlaybackMode,
@@ -138,27 +139,58 @@ function playbackRejectionMessage(track: TrackDetail | null, error: unknown): st
   return unavailableTrackMessage(track);
 }
 
-function currentLyricIndex(lyrics: LyricPayload, positionMs: number): number {
-  if (lyrics.mode !== "synced") {
-    return -1;
+async function waitForAudioSourceReady(
+  audio: HTMLAudioElement,
+  signal: AbortSignal
+): Promise<void> {
+  if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    return;
   }
 
-  const playbackPosition = positionMs + lyrics.offsetMs;
-  let low = 0;
-  let high = lyrics.lines.length - 1;
-  let match = -1;
+  await new Promise<void>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out while loading audio source"));
+    }, 4000);
 
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    if (playbackPosition >= lyrics.lines[mid].startMs) {
-      match = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      signal.removeEventListener("abort", handleAbort);
+      audio.removeEventListener("loadedmetadata", handleReady);
+      audio.removeEventListener("canplay", handleReady);
+      audio.removeEventListener("error", handleError);
+    };
 
-  return match;
+    const handleReady = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Audio source failed to load"));
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    audio.addEventListener("loadedmetadata", handleReady);
+    audio.addEventListener("canplay", handleReady);
+    audio.addEventListener("error", handleError);
+  });
+}
+
+async function assignAudioSource(
+  audio: HTMLAudioElement,
+  sourceUrl: string,
+  signal: AbortSignal
+): Promise<void> {
+  audio.src = sourceUrl;
+  audio.load();
+  await waitForAudioSourceReady(audio, signal);
 }
 
 function filterTracks(tracks: TrackListItem[], filter: AvailabilityFilter): TrackListItem[] {
@@ -189,12 +221,14 @@ function countAvailabilities(tracks: TrackListItem[]): AvailabilityCounts {
 
 export function App() {
   const appShellRef = useRef<HTMLDivElement | null>(null);
+  const libraryViewRef = useRef<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const playbackIntentRef = useRef(false);
   const trackObjectUrlRef = useRef<string | null>(null);
+  const sourceLoadStateRef = useRef<"idle" | "loading" | "ready">("idle");
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
   const trackDetailCacheRef = useRef(new Map<string, TrackDetail | null>());
@@ -412,7 +446,6 @@ export function App() {
   const availabilityCounts = countAvailabilities(libraryTracks);
   const visibleTracks = filterTracks(libraryTracks, availabilityFilter);
   const selectedTrackIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
-  const queueTracks = selectedTrackIndex >= 0 ? visibleTracks.slice(selectedTrackIndex) : [];
   const currentRoot = roots.find((root) => root.id === selectedRootId) ?? null;
   const currentRootLabel = currentRoot?.displayName ?? "All folders";
   const allFoldersTrackCount = hasLoadedRoots
@@ -448,6 +481,7 @@ export function App() {
       setIsPlaying(false);
       setPlaybackError(null);
       setActiveLyricLine(-1);
+      sourceLoadStateRef.current = "idle";
       return;
     }
 
@@ -593,33 +627,57 @@ export function App() {
     setPlaybackPositionMs(0);
 
     async function loadTrackSource(): Promise<void> {
-      try {
-        const objectUrl = await loadObjectUrl(
-          `replica-media://track/${encodeURIComponent(trackId)}`,
-          controller.signal
-        );
+      const mediaUrl = `replica-media://track/${encodeURIComponent(trackId)}`;
+      sourceLoadStateRef.current = "loading";
 
+      try {
+        clearTrackObjectUrl();
+        await assignAudioSource(audio, mediaUrl, controller.signal);
         if (ignore) {
-          URL.revokeObjectURL(objectUrl);
           return;
         }
-
-        clearTrackObjectUrl();
-        trackObjectUrlRef.current = objectUrl;
-        audio.src = objectUrl;
-        audio.load();
-
+        sourceLoadStateRef.current = "ready";
         if (playbackIntentRef.current) {
           await audio.play();
         }
-      } catch (error) {
-        if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
-          playbackIntentRef.current = false;
-          setIsPlaying(false);
-          if (error instanceof ResourceRequestError && error.status === 404) {
-            setReloadTick((value) => value + 1);
+        return;
+      } catch (directError) {
+        if (ignore || (directError instanceof DOMException && directError.name === "AbortError")) {
+          return;
+        }
+
+        try {
+          audio.pause();
+          audio.removeAttribute("src");
+          audio.load();
+
+          const objectUrl = await loadObjectUrl(mediaUrl, controller.signal);
+          if (ignore) {
+            URL.revokeObjectURL(objectUrl);
+            return;
           }
-          setPlaybackError(playbackRejectionMessage(trackDetail, error));
+
+          clearTrackObjectUrl();
+          trackObjectUrlRef.current = objectUrl;
+          await assignAudioSource(audio, objectUrl, controller.signal);
+          if (ignore) {
+            return;
+          }
+
+          sourceLoadStateRef.current = "ready";
+          if (playbackIntentRef.current) {
+            await audio.play();
+          }
+        } catch (error) {
+          if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
+            sourceLoadStateRef.current = "idle";
+            playbackIntentRef.current = false;
+            setIsPlaying(false);
+            if (error instanceof ResourceRequestError && error.status === 404) {
+              setReloadTick((value) => value + 1);
+            }
+            setPlaybackError(playbackRejectionMessage(trackDetail, error));
+          }
         }
       }
     }
@@ -629,6 +687,7 @@ export function App() {
     return () => {
       ignore = true;
       controller.abort();
+      sourceLoadStateRef.current = "idle";
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
@@ -994,6 +1053,10 @@ export function App() {
   });
 
   const handleAudioError = useEffectEvent(() => {
+    if (sourceLoadStateRef.current === "loading") {
+      return;
+    }
+
     playbackIntentRef.current = false;
     setIsPlaying(false);
     setPlaybackError(playbackErrorMessage(trackDetail?.format ?? ""));
@@ -1043,27 +1106,34 @@ export function App() {
       return;
     }
 
-    let frame = 0;
+    let timeoutId = 0;
 
     const syncLyricLine = () => {
       const nextIndex = currentLyricIndex(lyrics, Math.round(audio.currentTime * 1000));
       setActiveLyricLine((current) => (current === nextIndex ? current : nextIndex));
+      return nextIndex;
     };
 
-    const updateLyricLine = () => {
-      syncLyricLine();
-      if (!audio.paused && !audio.ended) {
-        frame = window.requestAnimationFrame(updateLyricLine);
+    const scheduleNext = () => {
+      window.clearTimeout(timeoutId);
+      const delay = nextLyricDelayMs(lyrics, Math.round(audio.currentTime * 1000));
+      if (delay == null || audio.paused || audio.ended) {
+        return;
       }
+
+      timeoutId = window.setTimeout(() => {
+        syncLyricLine();
+        scheduleNext();
+      }, delay);
     };
 
     const start = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(updateLyricLine);
+      syncLyricLine();
+      scheduleNext();
     };
 
     const stop = () => {
-      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeoutId);
     };
 
     audio.addEventListener("play", start);
@@ -1398,7 +1468,16 @@ export function App() {
             />
           ) : null}
 
-          <main className={isPlayerExpanded ? "expanded-player-view" : isSettingsView ? "settings-main" : "library-view"}>
+          <main
+            ref={(element) => {
+              if (!isPlayerExpanded && !isSettingsView) {
+                libraryViewRef.current = element;
+              } else if (libraryViewRef.current === element) {
+                libraryViewRef.current = null;
+              }
+            }}
+            className={isPlayerExpanded ? "expanded-player-view" : isSettingsView ? "settings-main" : "library-view"}
+          >
             {libraryError ? <div className="error-banner">{libraryError}</div> : null}
             {playbackError ? <div className="error-banner">{playbackError}</div> : null}
             {!isPlayerExpanded && !isSettingsView && selectedMissingTrack ? (
@@ -1421,7 +1500,8 @@ export function App() {
               <ExpandedPlayer
                 activeTab={activePanelTab}
                 selectedTrackId={selectedTrackId}
-                queueTracks={queueTracks}
+                queueTracks={visibleTracks}
+                queueStartIndex={selectedTrackIndex}
                 trackDetail={trackDetail}
                 lyrics={lyrics}
                 activeLyricLine={activeLyricLine}
@@ -1464,6 +1544,7 @@ export function App() {
                   isLoading={isLoadingLibrary}
                   showLoadingOverlay={isLoadingLibrary}
                   activeFilter={availabilityFilter}
+                  scrollContainerRef={libraryViewRef}
                   onOpenSettings={handleOpenSettings}
                   onSelectTrack={setSelectedTrackId}
                   onPlayTrack={handlePlayTrack}
