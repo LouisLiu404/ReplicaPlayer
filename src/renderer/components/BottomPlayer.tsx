@@ -1,4 +1,5 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent } from "react";
+import { useState } from "react";
 
 import type { TrackDetail } from "../../shared/types";
 import type { PlaybackMode } from "../playback";
@@ -60,21 +61,46 @@ export function BottomPlayer({
   const metaLine = track
     ? track.artist || track.album || "Unknown artist"
     : "Choose a track from the library.";
+  const [progressPreview, setProgressPreview] = useState<{ timeMs: number; leftPercent: number } | null>(null);
   const modeLabel =
     playbackMode === "shuffle"
       ? "Shuffle"
       : playbackMode === "repeat-all"
         ? "Repeat current scope"
         : playbackMode === "repeat-one"
-          ? "Repeat current track"
+        ? "Repeat current track"
           : "Shuffle";
+
+  function updateProgressPreview(event: PointerEvent<HTMLDivElement>): void {
+    if (!track) {
+      setProgressPreview(null);
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const relativeX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
+    const leftPercent = bounds.width > 0 ? relativeX / bounds.width : 0;
+
+    setProgressPreview({
+      timeMs: Math.round(totalDuration * leftPercent),
+      leftPercent
+    });
+  }
 
   return (
     <footer
       className="bottom-player"
-      style={{ "--player-progress": `${progressPercent * 100}%` } as CSSProperties}
+      style={{
+        "--player-progress": `${progressPercent * 100}%`,
+        "--volume-progress": `${volumePercent}%`
+      } as CSSProperties}
     >
-      <div className="bottom-player-progress-shell">
+      <div
+        className="bottom-player-progress-shell"
+        onPointerEnter={updateProgressPreview}
+        onPointerMove={updateProgressPreview}
+        onPointerLeave={() => setProgressPreview(null)}
+      >
         <input
           type="range"
           className="bottom-player-progress"
@@ -85,6 +111,14 @@ export function BottomPlayer({
           disabled={!track}
           aria-label="Seek"
         />
+        {progressPreview ? (
+          <div
+            className="bottom-player-progress-tooltip"
+            style={{ left: `${progressPreview.leftPercent * 100}%` }}
+          >
+            {formatDuration(progressPreview.timeMs)}
+          </div>
+        ) : null}
       </div>
 
       <div className="bottom-player-layout">
@@ -148,17 +182,13 @@ export function BottomPlayer({
             <VolumeIcon className="volume-icon" />
             <input
               type="range"
+              className="volume-slider"
               min={0}
               max={100}
               value={volumePercent}
               onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
               aria-label="Volume"
             />
-          </div>
-
-          <div className="bottom-player-meta">
-            <span>{track?.format ?? "Local Library"}</span>
-            <strong>{track ? formatDuration(totalDuration) : "0:00"}</strong>
           </div>
 
           <button
@@ -172,11 +202,6 @@ export function BottomPlayer({
             {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
           </button>
         </div>
-      </div>
-
-      <div className="player-time-row" aria-hidden={!track}>
-        <span>{formatDuration(currentTimeMs)}</span>
-        <span>{formatDuration(track ? totalDuration : 0)}</span>
       </div>
     </footer>
   );

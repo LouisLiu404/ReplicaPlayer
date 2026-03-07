@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 
 import type { TrackQuery } from "../shared/types";
 import { LibraryService } from "./library/library-service";
 import { registerProtocols } from "./protocols";
+import { getProductionRendererEntryUrl } from "./renderer-paths";
 import { getMainWindowOptions } from "./window-options";
 
 protocol.registerSchemesAsPrivileged([
@@ -46,6 +47,23 @@ function requireStringArray(value: unknown, fieldName: string): string[] {
   return value;
 }
 
+function requireHttpUrl(value: unknown, fieldName: string): string {
+  const url = requireString(value, fieldName);
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${fieldName} must be a valid URL`);
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`${fieldName} must use http or https`);
+  }
+
+  return parsed.toString();
+}
+
 function normalizeQuery(value: unknown): TrackQuery {
   if (!value || typeof value !== "object") {
     return {};
@@ -70,7 +88,7 @@ async function createMainWindow(): Promise<void> {
   if (process.env.NODE_ENV === "development") {
     await mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
   } else {
-    await mainWindow.loadURL("app://renderer/index.html");
+    await mainWindow.loadURL(getProductionRendererEntryUrl());
   }
 }
 
@@ -115,6 +133,10 @@ function registerIpcHandlers(library: LibraryService): void {
 
   ipcMain.handle("library:get-roots", async () => {
     return library.getRoots();
+  });
+
+  ipcMain.handle("system:open-external", async (_event, payload) => {
+    await shell.openExternal(requireHttpUrl(payload, "url"));
   });
 
   library.onScanProgress((progress) => {

@@ -117,6 +117,10 @@ export interface LibraryApi {
   getRoots(): Promise<LibraryRoot[]>;
 }
 
+export interface SystemApi {
+  openExternal(url: string): Promise<void>;
+}
+
 export type WorkerMethod =
   | "init"
   | "addRoots"

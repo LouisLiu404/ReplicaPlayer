@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react";
+
 import type { LibraryRoot, ScanProgress } from "../../shared/types";
 import { scanPhaseLabel } from "../utils";
 import { EmptyState } from "./EmptyState";
@@ -9,15 +11,28 @@ interface SettingsViewProps {
   onAddRoots: () => void;
   onRescan: () => void;
   onRemoveRoot: (rootId: string) => void;
+  onOpenExternal: (url: string) => void;
 }
+
+const MISANS_DOWNLOAD_URL = "https://hyperos.mi.com/font/en/download/";
+const MISANS_LICENSE_URL = "https://hyperos.mi.com/font-download/MiSans%E5%AD%97%E4%BD%93%E7%9F%A5%E8%AF%86%E4%BA%A7%E6%9D%83%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf";
 
 export function SettingsView({
   roots,
   scanProgress,
   onAddRoots,
   onRescan,
-  onRemoveRoot
+  onRemoveRoot,
+  onOpenExternal
 }: SettingsViewProps) {
+  function handleExternalLinkClick(
+    event: MouseEvent<HTMLAnchorElement>,
+    url: string
+  ): void {
+    event.preventDefault();
+    onOpenExternal(url);
+  }
+
   return (
     <section className="settings-view">
       <div className="settings-hero">
@@ -80,6 +95,27 @@ export function SettingsView({
           ))}
         </div>
       )}
+
+      <section className="settings-notice-card" aria-labelledby="misans-notice-title">
+        <h2 id="misans-notice-title">MiSans Font Notice (Xiaomi)</h2>
+        <p>
+          Replica Player uses MiSans fonts. Xiaomi&apos;s MiSans font license requires software to clearly indicate MiSans usage.
+        </p>
+        <p>
+          Key conditions include no adaptation or redevelopment of MiSans font files, no standalone rental, sublicense,
+          distribution, or sale of MiSans font files, keeping the copyright notice and agreement with MiSans font copies,
+          and no illegal use.
+        </p>
+        <p className="settings-notice-label">Official sources</p>
+        <div className="settings-notice-links">
+          <a href={MISANS_DOWNLOAD_URL} onClick={(event) => handleExternalLinkClick(event, MISANS_DOWNLOAD_URL)}>
+            Xiaomi MiSans download page
+          </a>
+          <a href={MISANS_LICENSE_URL} onClick={(event) => handleExternalLinkClick(event, MISANS_LICENSE_URL)}>
+            Xiaomi MiSans license agreement (PDF)
+          </a>
+        </div>
+      </section>
     </section>
   );
 }

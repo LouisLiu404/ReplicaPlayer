@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { LibraryApi, ScanProgress } from "./shared/types";
+import type { LibraryApi, ScanProgress, SystemApi } from "./shared/types";
 
 const api: LibraryApi = {
   pickRoots: () => ipcRenderer.invoke("library:pick-roots"),
@@ -25,3 +25,9 @@ const api: LibraryApi = {
 };
 
 contextBridge.exposeInMainWorld("library", api);
+
+const systemApi: SystemApi = {
+  openExternal: (url) => ipcRenderer.invoke("system:open-external", url)
+};
+
+contextBridge.exposeInMainWorld("system", systemApi);

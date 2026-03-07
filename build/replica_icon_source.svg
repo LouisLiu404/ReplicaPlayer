@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8a00" />
+      <stop offset="100%" stop-color="#ff3300" />
+    </linearGradient>
+
+    <linearGradient id="blackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a2a" />
+      <stop offset="100%" stop-color="#000000" />
+    </linearGradient>
+
+    <filter id="orangeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="20" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <g transform="translate(-15, 12)">
+    <path
+      d="M 176 136 C 166 130 156 136 156 148 L 156 324 C 156 336 166 342 176 336 L 336 248 C 346 242 346 230 336 224 Z"
+      fill="url(#orangeGrad)"
+      filter="url(#orangeGlow)"
+      opacity="0.85"
+    />
+
+    <path
+      d="M 226 186 C 216 180 206 186 206 198 L 206 374 C 206 386 216 392 226 386 L 386 298 C 396 292 396 280 386 274 Z"
+      fill="url(#blackGrad)"
+      stroke="url(#orangeGrad)"
+      stroke-width="6"
+    />
+  </g>
+</svg>

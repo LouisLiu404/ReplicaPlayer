@@ -1,10 +1,18 @@
+const path = require("node:path");
 const { MakerZIP } = require("@electron-forge/maker-zip");
 const { WebpackPlugin } = require("@electron-forge/plugin-webpack");
+const { generateMacIcon } = require("./scripts/generate-macos-icon");
 
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: "Replica Player"
+    executableName: "Replica Player",
+    icon: path.resolve(__dirname, "build/app-icon.icns")
+  },
+  hooks: {
+    generateAssets: async () => {
+      generateMacIcon();
+    }
   },
   makers: [new MakerZIP({}, ["darwin"])],
   plugins: [

@@ -5,6 +5,10 @@ import { Readable } from "node:stream";
 import { protocol } from "electron";
 
 import { LibraryService } from "./library/library-service";
+import {
+  getProductionRendererRoot,
+  normalizeProductionRendererRequestPath
+} from "./renderer-paths";
 
 function response(status: number, body: string): Response {
   return new Response(body, {
@@ -186,7 +190,7 @@ export async function registerProtocols(library: LibraryService): Promise<void> 
     return;
   }
 
-  const rendererRoot = path.resolve(__dirname, "../renderer/main_window");
+  const rendererRoot = getProductionRendererRoot(__dirname);
 
   await protocol.handle("app", async (request) => {
     const requestUrl = new URL(request.url);
@@ -194,7 +198,7 @@ export async function registerProtocols(library: LibraryService): Promise<void> 
       return response(404, "Unknown app resource");
     }
 
-    const requestPath = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+    const requestPath = normalizeProductionRendererRequestPath(requestUrl.pathname);
     const filePath = resolveWithin(rendererRoot, decodeURIComponent(requestPath));
     if (!filePath) {
       return response(403, "Forbidden");

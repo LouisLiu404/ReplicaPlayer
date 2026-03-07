@@ -35,6 +35,7 @@ import {
   extractStreamerVars,
   type StreamerVars
 } from "./streamer";
+import { calculatePulseLevel, smoothPulse } from "./visualizer";
 
 type AvailabilityCounts = {
   all: number;
@@ -176,6 +177,7 @@ function countAvailabilities(tracks: TrackListItem[]): AvailabilityCounts {
 }
 
 export function App() {
+  const appShellRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -185,6 +187,13 @@ export function App() {
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
   const streamerCacheRef = useRef(new Map<string, StreamerVars>());
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const analyserDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const pulseFrameRef = useRef<number | null>(null);
+  const mainPulseRef = useRef(0);
+  const footerPulseRef = useRef(0);
 
   const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
@@ -218,6 +227,16 @@ export function App() {
   const deferredSearch = useDeferredValue(search);
 
   activePanelTabRef.current = activePanelTab;
+
+  function applyShellPulse(mainPulse: number, footerPulse: number): void {
+    const appShell = appShellRef.current;
+    if (!appShell) {
+      return;
+    }
+
+    appShell.style.setProperty("--streamer-main-pulse", mainPulse.toFixed(3));
+    appShell.style.setProperty("--streamer-footer-pulse", footerPulse.toFixed(3));
+  }
 
   function clearTrackObjectUrl(): void {
     if (trackObjectUrlRef.current) {
@@ -649,6 +668,152 @@ export function App() {
       controller.abort();
     };
   }, [trackDetail?.artworkUrl]);
+
+  useEffect(() => {
+    const appShell = appShellRef.current;
+    if (!appShell) {
+      return;
+    }
+
+    for (const [key, value] of Object.entries(streamerVars)) {
+      appShell.style.setProperty(key, value);
+    }
+
+    appShell.style.setProperty("--streamer-play-state", isPlaying ? "running" : "paused");
+  }, [isPlaying, streamerVars]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    const AudioContextCtor =
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!audio || !AudioContextCtor) {
+      applyShellPulse(0, 0);
+      return;
+    }
+
+    const ensureAnalyser = (): boolean => {
+      if (analyserRef.current && audioContextRef.current) {
+        return true;
+      }
+
+      try {
+        const context = new AudioContextCtor();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.82;
+
+        const source = context.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(context.destination);
+
+        audioContextRef.current = context;
+        analyserRef.current = analyser;
+        analyserDataRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+        mediaSourceRef.current = source;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const stopLoop = () => {
+      if (pulseFrameRef.current != null) {
+        window.cancelAnimationFrame(pulseFrameRef.current);
+        pulseFrameRef.current = null;
+      }
+    };
+
+    const tick = () => {
+      pulseFrameRef.current = null;
+
+      const analyser = analyserRef.current;
+      const data = analyserDataRef.current;
+      const context = audioContextRef.current;
+      const isActive =
+        !audio.paused &&
+        !audio.ended &&
+        analyser != null &&
+        data != null &&
+        context?.state === "running";
+
+      let targetPulse = 0;
+
+      if (isActive && analyser && data) {
+        analyser.getByteFrequencyData(data);
+        targetPulse = calculatePulseLevel(data);
+      }
+
+      mainPulseRef.current = smoothPulse(mainPulseRef.current, targetPulse, isActive);
+      footerPulseRef.current = smoothPulse(
+        footerPulseRef.current,
+        Math.min(targetPulse * 1.18, 1),
+        isActive
+      );
+
+      applyShellPulse(mainPulseRef.current, footerPulseRef.current);
+
+      if (isActive || mainPulseRef.current > 0 || footerPulseRef.current > 0) {
+        pulseFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const startLoop = async () => {
+      if (!ensureAnalyser()) {
+        return;
+      }
+
+      if (audioContextRef.current?.state === "suspended") {
+        try {
+          await audioContextRef.current.resume();
+        } catch {
+          // Ignore resume failures and leave pulse idle.
+        }
+      }
+
+      if (pulseFrameRef.current == null) {
+        pulseFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const decayLoop = () => {
+      if (pulseFrameRef.current == null) {
+        pulseFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    const handlePlay = () => {
+      void startLoop();
+    };
+
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("playing", handlePlay);
+    audio.addEventListener("pause", decayLoop);
+    audio.addEventListener("ended", decayLoop);
+
+    if (!audio.paused) {
+      void startLoop();
+    } else {
+      applyShellPulse(0, 0);
+    }
+
+    return () => {
+      stopLoop();
+      applyShellPulse(0, 0);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("playing", handlePlay);
+      audio.removeEventListener("pause", decayLoop);
+      audio.removeEventListener("ended", decayLoop);
+      audioContextRef.current?.close().catch(() => {});
+      mediaSourceRef.current?.disconnect();
+      analyserRef.current?.disconnect();
+      mediaSourceRef.current = null;
+      analyserRef.current = null;
+      analyserDataRef.current = null;
+      audioContextRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1129,7 +1294,7 @@ export function App() {
       : null;
 
   return (
-    <div className="app-shell">
+    <div ref={appShellRef} className="app-shell">
       <audio ref={audioRef} />
       <ScanProgressModal
         scan={scanModal}
@@ -1198,6 +1363,7 @@ export function App() {
                 onAddRoots={() => void handleAddRoots()}
                 onRescan={() => void handleRescan()}
                 onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
+                onOpenExternal={(url) => void window.system.openExternal(url)}
               />
             ) : (
               <>
