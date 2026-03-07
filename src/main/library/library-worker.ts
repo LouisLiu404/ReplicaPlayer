@@ -14,10 +14,19 @@ import type {
 import { LibraryRepository } from "./repository";
 import { LibraryScanner } from "./scanner";
 
-class WorkerApplication {
+type ScannerLike = Pick<LibraryScanner, "addRoots" | "rescan">;
+type ScannerFactory = (repository: LibraryRepository, artworkDir: string) => ScannerLike;
+
+export class WorkerApplication {
   private repository: LibraryRepository | null = null;
-  private scanner: LibraryScanner | null = null;
+  private scanner: ScannerLike | null = null;
   private artworkDir = "";
+  private activeScanJobId: string | null = null;
+  private activeScanPromise: Promise<void> | null = null;
+
+  constructor(private readonly createScanner: ScannerFactory = (repository, artworkDir) => (
+    new LibraryScanner(repository, artworkDir)
+  )) {}
 
   async init(userDataPath: string): Promise<void> {
     await fs.mkdir(userDataPath, { recursive: true });
@@ -26,7 +35,7 @@ class WorkerApplication {
 
     const databasePath = path.join(userDataPath, "library.sqlite");
     this.repository = new LibraryRepository(databasePath);
-    this.scanner = new LibraryScanner(this.repository, this.artworkDir);
+    this.scanner = this.createScanner(this.repository, this.artworkDir);
   }
 
   async addRoots(paths: string[]) {
@@ -42,8 +51,13 @@ class WorkerApplication {
   }
 
   async rescan(): Promise<string> {
+    if (this.activeScanPromise && this.activeScanJobId) {
+      return this.activeScanJobId;
+    }
+
     const jobId = randomUUID();
     const scanner = this.getScanner();
+    this.activeScanJobId = jobId;
 
     this.emitProgress({
       jobId,
@@ -53,15 +67,22 @@ class WorkerApplication {
       message: "Scan queued"
     });
 
-    void scanner.rescan(jobId, (progress) => this.emitProgress(progress)).catch((error) => {
-      this.emitProgress({
-        jobId,
-        phase: "error",
-        processedFiles: 0,
-        discoveredFiles: 0,
-        message: error instanceof Error ? error.message : "Library scan failed"
+    this.activeScanPromise = scanner.rescan(jobId, (progress) => this.emitProgress(progress))
+      .catch((error) => {
+        this.emitProgress({
+          jobId,
+          phase: "error",
+          processedFiles: 0,
+          discoveredFiles: 0,
+          message: error instanceof Error ? error.message : "Library scan failed"
+        });
+      })
+      .finally(() => {
+        if (this.activeScanJobId === jobId) {
+          this.activeScanJobId = null;
+          this.activeScanPromise = null;
+        }
       });
-    });
 
     return jobId;
   }
@@ -93,19 +114,6 @@ class WorkerApplication {
       await fs.access(track.path);
       return track.path;
     } catch {
-      const root = repository.getRoot(track.rootId);
-      if (root) {
-        try {
-          await fs.access(root.path);
-          repository.setTrackAvailability(trackId, "missing");
-        } catch {
-          repository.markRoot(root.id, "offline", "Saved folder is unavailable", new Date().toISOString());
-          repository.setTrackAvailabilityForRoot(root.id, "offline");
-        }
-      } else {
-        repository.setTrackAvailability(trackId, "missing");
-      }
-
       return null;
     }
   }
@@ -145,7 +153,7 @@ class WorkerApplication {
     return this.repository;
   }
 
-  private getScanner(): LibraryScanner {
+  private getScanner(): ScannerLike {
     if (!this.scanner) {
       throw new Error("Library worker has not been initialized");
     }

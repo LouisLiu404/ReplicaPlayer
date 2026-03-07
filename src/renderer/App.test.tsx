@@ -13,6 +13,7 @@ import type {
 } from "../shared/types";
 import { DEFAULT_EXPANDED_TAB_STORAGE_KEY } from "./panel-preferences";
 import { TRACK_SORT_STORAGE_KEY } from "./sort-preferences";
+import { VISUAL_EFFECTS_STORAGE_KEY } from "./visual-effects-preferences";
 import { App } from "./App";
 
 vi.mock("./streamer", () => ({
@@ -21,9 +22,12 @@ vi.mock("./streamer", () => ({
     "--streamer-color-b": "rgba(255, 80, 0, 0.2)",
     "--streamer-color-c": "rgba(255, 200, 80, 0.2)",
     "--streamer-color-d": "rgba(255, 255, 255, 0.08)",
-    "--streamer-opacity": "0.5",
     "--streamer-footer-a": "rgba(255, 120, 0, 0.18)",
     "--streamer-footer-b": "rgba(255, 80, 0, 0.18)",
+    "--streamer-surface-tint": "rgba(255, 120, 0, 0.12)",
+    "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
+    "--streamer-shell-wash": "rgba(255, 200, 80, 0.08)",
+    "--streamer-opacity": "0.5",
     "--streamer-footer-opacity": "0.32"
   },
   extractStreamerVars: vi.fn(async () => ({
@@ -31,9 +35,12 @@ vi.mock("./streamer", () => ({
     "--streamer-color-b": "rgba(255, 80, 0, 0.2)",
     "--streamer-color-c": "rgba(255, 200, 80, 0.2)",
     "--streamer-color-d": "rgba(255, 255, 255, 0.08)",
-    "--streamer-opacity": "0.5",
     "--streamer-footer-a": "rgba(255, 120, 0, 0.18)",
     "--streamer-footer-b": "rgba(255, 80, 0, 0.18)",
+    "--streamer-surface-tint": "rgba(255, 120, 0, 0.12)",
+    "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
+    "--streamer-shell-wash": "rgba(255, 200, 80, 0.08)",
+    "--streamer-opacity": "0.5",
     "--streamer-footer-opacity": "0.32"
   }))
 }));
@@ -155,22 +162,36 @@ vi.mock("./components/SettingsView", () => ({
   SettingsView: ({
     defaultExpandedTab,
     trackSort,
+    visualEffects,
     onDefaultExpandedTabChange,
-    onTrackSortChange
+    onTrackSortChange,
+    onVisualEffectChange
   }: {
     defaultExpandedTab: string;
     trackSort: string;
+    visualEffects: {
+      mainBackground: boolean;
+      bottomPlayer: boolean;
+      lyrics: boolean;
+    };
     onDefaultExpandedTabChange: (tab: "queue" | "lyrics" | "details") => void;
     onTrackSortChange: (sort: "title-asc" | "title-desc" | "modified-asc" | "modified-desc") => void;
+    onVisualEffectChange: (effect: "mainBackground" | "bottomPlayer" | "lyrics", enabled: boolean) => void;
   }) => (
     <div data-testid="settings-view">
       <div data-testid="settings-default-tab">{defaultExpandedTab}</div>
       <div data-testid="settings-track-sort">{trackSort}</div>
+      <div data-testid="settings-main-glow">{String(visualEffects.mainBackground)}</div>
+      <div data-testid="settings-footer-glow">{String(visualEffects.bottomPlayer)}</div>
+      <div data-testid="settings-lyrics-glow">{String(visualEffects.lyrics)}</div>
       <button type="button" onClick={() => onDefaultExpandedTabChange("queue")}>Default Queue</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("lyrics")}>Default Lyrics</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("details")}>Default Details</button>
       <button type="button" onClick={() => onTrackSortChange("title-desc")}>Sort Title Desc</button>
       <button type="button" onClick={() => onTrackSortChange("modified-asc")}>Sort Modified Asc</button>
+      <button type="button" onClick={() => onVisualEffectChange("mainBackground", false)}>Disable Main Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("bottomPlayer", false)}>Disable Footer Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("lyrics", false)}>Disable Lyrics Glow</button>
     </div>
   )
 }));
@@ -494,6 +515,30 @@ describe("App", () => {
     await waitFor(() => {
       const lastCall = mock.queryTracks.mock.calls.at(-1)?.[0] as QueryArg | undefined;
       expect(lastCall?.sort).toBe("modified-asc");
+    });
+  });
+
+  it("persists visual effect toggles from settings", async () => {
+    await renderAppWithMock();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-main-glow").textContent).toBe("true");
+      expect(screen.getByTestId("settings-footer-glow").textContent).toBe("true");
+      expect(screen.getByTestId("settings-lyrics-glow").textContent).toBe("true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Disable Footer Glow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable Lyrics Glow" }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem(VISUAL_EFFECTS_STORAGE_KEY)).toBe(
+        JSON.stringify({
+          mainBackground: true,
+          bottomPlayer: false,
+          lyrics: false
+        })
+      );
     });
   });
 

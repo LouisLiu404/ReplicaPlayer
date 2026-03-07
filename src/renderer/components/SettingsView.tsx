@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 
 import type { LibraryRoot, ScanProgress, TrackSortOption } from "../../shared/types";
+import type { VisualEffectKey, VisualEffectsPreferences } from "../visual-effects-preferences";
 import type { ActivePanelTab } from "./ui-types";
 import { scanPhaseLabel } from "../utils";
 import { EmptyState } from "./EmptyState";
@@ -11,11 +12,13 @@ interface SettingsViewProps {
   scanProgress: ScanProgress | null;
   defaultExpandedTab: ActivePanelTab;
   trackSort: TrackSortOption;
+  visualEffects: VisualEffectsPreferences;
   onAddRoots: () => void;
   onRescan: () => void;
   onRemoveRoot: (rootId: string) => void;
   onDefaultExpandedTabChange: (tab: ActivePanelTab) => void;
   onTrackSortChange: (sort: TrackSortOption) => void;
+  onVisualEffectChange: (effect: VisualEffectKey, enabled: boolean) => void;
   onOpenExternal: (url: string) => void;
 }
 
@@ -27,11 +30,13 @@ export function SettingsView({
   scanProgress,
   defaultExpandedTab,
   trackSort,
+  visualEffects,
   onAddRoots,
   onRescan,
   onRemoveRoot,
   onDefaultExpandedTabChange,
   onTrackSortChange,
+  onVisualEffectChange,
   onOpenExternal
 }: SettingsViewProps) {
   const expandedTabOptions: Array<{ id: ActivePanelTab; label: string; description: string }> = [
@@ -44,6 +49,11 @@ export function SettingsView({
     { id: "title-desc", label: "Title Z-A", description: "Sort tracks in reverse alphabetical title order." },
     { id: "modified-asc", label: "Oldest first", description: "Sort by file modified date from oldest to newest." },
     { id: "modified-desc", label: "Newest first", description: "Sort by file modified date from newest to oldest." }
+  ];
+  const visualEffectOptions: Array<{ id: VisualEffectKey; label: string; description: string }> = [
+    { id: "mainBackground", label: "Main background glow", description: "Show the ambient glow behind the main library and expanded player surface." },
+    { id: "bottomPlayer", label: "Bottom player ambient light", description: "Show the glass glow and ambient lighting behind the footer controls." },
+    { id: "lyrics", label: "Lyrics module glow", description: "Show the animated streamer inside the lyrics panel." }
   ];
 
   function handleExternalLinkClick(
@@ -160,6 +170,38 @@ export function SettingsView({
               <span>{option.description}</span>
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="settings-section-card" aria-labelledby="visual-effects-settings">
+        <div className="settings-section-copy">
+          <h2 id="visual-effects-settings">Visual effects</h2>
+          <p>Turn ambient glow layers on or off independently without changing the rest of the layout.</p>
+        </div>
+
+        <div className="settings-toggle-list">
+          {visualEffectOptions.map((option) => {
+            const enabled = visualEffects[option.id];
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role="switch"
+                aria-checked={enabled}
+                className={`settings-toggle-card ${enabled ? "active" : ""}`}
+                onClick={() => onVisualEffectChange(option.id, !enabled)}
+              >
+                <div className="settings-toggle-copy">
+                  <strong>{option.label}</strong>
+                  <span>{option.description}</span>
+                </div>
+                <span className={`settings-toggle-pill ${enabled ? "active" : ""}`} aria-hidden="true">
+                  <span className="settings-toggle-thumb" />
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 

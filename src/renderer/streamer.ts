@@ -17,6 +17,9 @@ export type StreamerVars = {
   "--streamer-color-d": string;
   "--streamer-footer-a": string;
   "--streamer-footer-b": string;
+  "--streamer-surface-tint": string;
+  "--streamer-surface-highlight": string;
+  "--streamer-shell-wash": string;
   "--streamer-opacity": string;
   "--streamer-footer-opacity": string;
 };
@@ -28,8 +31,20 @@ export const DEFAULT_STREAMER_VARS: StreamerVars = {
   "--streamer-color-d": "rgba(255, 209, 143, 0.12)",
   "--streamer-footer-a": "rgba(255, 120, 92, 0.24)",
   "--streamer-footer-b": "rgba(255, 184, 78, 0.18)",
+  "--streamer-surface-tint": "rgba(255, 132, 102, 0.14)",
+  "--streamer-surface-highlight": "rgba(255, 210, 146, 0.12)",
+  "--streamer-shell-wash": "rgba(255, 168, 95, 0.1)",
   "--streamer-opacity": "0.92",
   "--streamer-footer-opacity": "0.84"
+};
+
+type PaletteProfile = {
+  base: RGB;
+  highlight: RGB;
+  accent: RGB;
+  soft: RGB;
+  averageLightness: number;
+  contrastLift: number;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -45,6 +60,15 @@ function adjustColor({ r, g, b }: RGB, delta: number): RGB {
     r: clamp(r + 255 * delta, 0, 255),
     g: clamp(g + 255 * delta, 0, 255),
     b: clamp(b + 255 * delta, 0, 255)
+  };
+}
+
+function mixColors(left: RGB, right: RGB, ratio: number): RGB {
+  const clampedRatio = clamp(ratio, 0, 1);
+  return {
+    r: (left.r * (1 - clampedRatio)) + (right.r * clampedRatio),
+    g: (left.g * (1 - clampedRatio)) + (right.g * clampedRatio),
+    b: (left.b * (1 - clampedRatio)) + (right.b * clampedRatio)
   };
 }
 
@@ -71,6 +95,44 @@ function toHsl({ r, g, b }: RGB): { saturation: number; lightness: number } {
   return { saturation, lightness };
 }
 
+function toLinearChannel(channel: number): number {
+  const normalized = channel / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(color: RGB): number {
+  return (
+    (0.2126 * toLinearChannel(color.r)) +
+    (0.7152 * toLinearChannel(color.g)) +
+    (0.0722 * toLinearChannel(color.b))
+  );
+}
+
+function ensureMinLuminance(color: RGB, minimum: number): RGB {
+  if (relativeLuminance(color) >= minimum) {
+    return color;
+  }
+
+  let low = 0;
+  let high = 1;
+  let best = color;
+
+  for (let step = 0; step < 8; step += 1) {
+    const ratio = (low + high) / 2;
+    const next = mixColors(color, { r: 255, g: 255, b: 255 }, ratio);
+    if (relativeLuminance(next) >= minimum) {
+      best = next;
+      high = ratio;
+    } else {
+      low = ratio;
+    }
+  }
+
+  return best;
+}
+
 function chooseDistinctColor(
   candidates: Bucket[],
   selected: RGB[],
@@ -83,7 +145,7 @@ function chooseDistinctColor(
   return candidate ?? fallback;
 }
 
-function buildPaletteFromPixels(data: Uint8ClampedArray): RGB[] {
+function buildPaletteFromPixels(data: Uint8ClampedArray): PaletteProfile {
   const buckets = new Map<string, { r: number; g: number; b: number; count: number }>();
 
   for (let index = 0; index < data.length; index += 16) {
@@ -127,42 +189,82 @@ function buildPaletteFromPixels(data: Uint8ClampedArray): RGB[] {
     .filter((entry) => entry.lightness >= 0.06 && entry.lightness <= 0.82)
     .sort((left, right) => right.count - left.count);
 
+  const fallbackBucket: Bucket = {
+    r: 255,
+    g: 107,
+    b: 90,
+    count: 1,
+    saturation: 0.9,
+    lightness: 0.5
+  };
+
   const darkest =
     candidates
       .filter((entry) => entry.lightness <= 0.42)
       .sort((left, right) =>
         (right.count * (0.9 + right.saturation)) - (left.count * (0.9 + left.saturation))
       )[0] ??
-    candidates[0] ?? {
-      r: 255,
-      g: 107,
-      b: 90,
-      count: 1,
-      saturation: 0.9,
-      lightness: 0.5
-    };
+    candidates[0] ??
+    fallbackBucket;
 
-  const vibrant =
-    candidates
-      .filter((entry) => entry.saturation >= 0.24)
-      .sort((left, right) =>
-        (right.count * (1.2 + right.saturation)) - (left.count * (1.2 + left.saturation))
-      ) ?? [];
+  const vibrant = candidates
+    .filter((entry) => entry.saturation >= 0.24)
+    .sort((left, right) =>
+      (right.count * (1.2 + right.saturation)) - (left.count * (1.2 + left.saturation))
+    );
 
-  const muted =
-    candidates
-      .filter((entry) => entry.saturation >= 0.12)
-      .sort((left, right) =>
-        (right.count * (0.8 + (1 - Math.abs(right.lightness - 0.45)))) -
-        (left.count * (0.8 + (1 - Math.abs(left.lightness - 0.45))))
-      ) ?? [];
+  const muted = candidates
+    .filter((entry) => entry.saturation >= 0.12)
+    .sort((left, right) =>
+      (right.count * (0.8 + (1 - Math.abs(right.lightness - 0.45)))) -
+      (left.count * (0.8 + (1 - Math.abs(left.lightness - 0.45))))
+    );
 
-  const base = adjustColor(darkest, -0.04);
-  const highlight = chooseDistinctColor(vibrant, [base], adjustColor(base, 0.22));
-  const accent = chooseDistinctColor(vibrant.slice(1), [base, highlight], adjustColor(highlight, -0.08));
-  const soft = chooseDistinctColor(muted, [base, highlight, accent], adjustColor(base, 0.18));
+  const topCandidates = candidates.slice(0, 24);
+  const weightedLightness = topCandidates.length > 0
+    ? topCandidates.reduce((sum, candidate) => sum + (candidate.lightness * candidate.count), 0) /
+      topCandidates.reduce((sum, candidate) => sum + candidate.count, 0)
+    : fallbackBucket.lightness;
+  const contrastLift = clamp((0.42 - weightedLightness) / 0.24, 0, 1);
 
-  return [base, highlight, accent, soft];
+  const baseCandidate = adjustColor(darkest, -0.03 + (contrastLift * 0.02));
+  const highlightCandidate = chooseDistinctColor(vibrant, [baseCandidate], adjustColor(baseCandidate, 0.22));
+  const accentCandidate = chooseDistinctColor(
+    vibrant.slice(1),
+    [baseCandidate, highlightCandidate],
+    adjustColor(highlightCandidate, -0.06)
+  );
+  const softCandidate = chooseDistinctColor(
+    muted,
+    [baseCandidate, highlightCandidate, accentCandidate],
+    adjustColor(baseCandidate, 0.18)
+  );
+
+  const base = ensureMinLuminance(
+    mixColors(baseCandidate, softCandidate, 0.08 + (contrastLift * 0.12)),
+    0.04 + (contrastLift * 0.04)
+  );
+  const highlight = ensureMinLuminance(
+    mixColors(highlightCandidate, softCandidate, contrastLift * 0.18),
+    0.18 + (contrastLift * 0.17)
+  );
+  const accent = ensureMinLuminance(
+    mixColors(accentCandidate, highlight, 0.08 + (contrastLift * 0.12)),
+    0.15 + (contrastLift * 0.13)
+  );
+  const soft = ensureMinLuminance(
+    mixColors(softCandidate, highlight, 0.12 + (contrastLift * 0.18)),
+    0.12 + (contrastLift * 0.12)
+  );
+
+  return {
+    base,
+    highlight,
+    accent,
+    soft,
+    averageLightness: weightedLightness,
+    contrastLift
+  };
 }
 
 async function decodeArtworkToPixels(artworkUrl: string, signal: AbortSignal): Promise<Uint8ClampedArray> {
@@ -202,21 +304,46 @@ async function decodeArtworkToPixels(artworkUrl: string, signal: AbortSignal): P
   return context.getImageData(0, 0, canvas.width, canvas.height).data;
 }
 
+export function deriveStreamerVarsFromPixels(pixels: Uint8ClampedArray): StreamerVars {
+  const {
+    base,
+    highlight,
+    accent,
+    soft,
+    averageLightness,
+    contrastLift
+  } = buildPaletteFromPixels(pixels);
+
+  const darkArtworkBias = clamp((0.46 - averageLightness) / 0.22, 0, 1);
+  const luminousHighlight = ensureMinLuminance(
+    mixColors(highlight, { r: 255, g: 255, b: 255 }, 0.14 + (darkArtworkBias * 0.28)),
+    0.36 + (contrastLift * 0.16)
+  );
+  const footerHighlight = mixColors(highlight, luminousHighlight, 0.36 + (contrastLift * 0.14));
+  const footerAccent = mixColors(accent, luminousHighlight, 0.2 + (contrastLift * 0.12));
+  const surfaceTint = mixColors(base, soft, 0.5);
+  const surfaceHighlight = mixColors(luminousHighlight, soft, 0.28);
+  const shellWash = mixColors(luminousHighlight, { r: 255, g: 255, b: 255 }, 0.12 + (darkArtworkBias * 0.08));
+
+  return {
+    "--streamer-color-a": toRgba(base, 0.24 + (contrastLift * 0.08)),
+    "--streamer-color-b": toRgba(highlight, 0.2 + (contrastLift * 0.08)),
+    "--streamer-color-c": toRgba(accent, 0.18 + (contrastLift * 0.08)),
+    "--streamer-color-d": toRgba(soft, 0.16 + (contrastLift * 0.08)),
+    "--streamer-footer-a": toRgba(footerHighlight, 0.26 + (darkArtworkBias * 0.12)),
+    "--streamer-footer-b": toRgba(footerAccent, 0.2 + (darkArtworkBias * 0.1)),
+    "--streamer-surface-tint": toRgba(surfaceTint, 0.14 + (darkArtworkBias * 0.08)),
+    "--streamer-surface-highlight": toRgba(surfaceHighlight, 0.12 + (darkArtworkBias * 0.08)),
+    "--streamer-shell-wash": toRgba(shellWash, 0.1 + (darkArtworkBias * 0.06)),
+    "--streamer-opacity": (0.94 + (darkArtworkBias * 0.16)).toFixed(2),
+    "--streamer-footer-opacity": (0.88 + (darkArtworkBias * 0.18)).toFixed(2)
+  };
+}
+
 export async function extractStreamerVars(
   artworkUrl: string,
   signal: AbortSignal
 ): Promise<StreamerVars> {
   const pixels = await decodeArtworkToPixels(artworkUrl, signal);
-  const [base, highlight, accent, soft] = buildPaletteFromPixels(pixels);
-
-  return {
-    "--streamer-color-a": toRgba(base, 0.22),
-    "--streamer-color-b": toRgba(highlight, 0.18),
-    "--streamer-color-c": toRgba(accent, 0.16),
-    "--streamer-color-d": toRgba(soft, 0.14),
-    "--streamer-footer-a": toRgba(adjustColor(highlight, 0.04), 0.22),
-    "--streamer-footer-b": toRgba(adjustColor(accent, 0.08), 0.16),
-    "--streamer-opacity": "0.98",
-    "--streamer-footer-opacity": "0.92"
-  };
+  return deriveStreamerVarsFromPixels(pixels);
 }

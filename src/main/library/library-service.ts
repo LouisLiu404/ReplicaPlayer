@@ -24,38 +24,29 @@ type PendingRequest = {
   reject: (error: Error) => void;
 };
 
-export class LibraryService extends EventEmitter {
-  private readonly worker: Worker;
-  private readonly pending = new Map<string, PendingRequest>();
+type LibraryWorker = Pick<Worker, "on" | "postMessage" | "terminate">;
+type WorkerFactory = (workerPath: string) => LibraryWorker;
 
-  constructor(private readonly userDataPath: string) {
+export class LibraryService extends EventEmitter {
+  private worker: LibraryWorker | null = null;
+  private readonly pending = new Map<string, PendingRequest>();
+  private recovering: Promise<void> | null = null;
+  private destroyed = false;
+  private initialized = false;
+  private readonly workerPath: string;
+
+  constructor(
+    private readonly userDataPath: string,
+    private readonly createWorker: WorkerFactory = (workerPath) => new Worker(workerPath)
+  ) {
     super();
-    const workerPath = path.join(__dirname, "library-worker.js");
-    this.worker = new Worker(workerPath);
-    this.worker.on("message", (message: WorkerResponseMessage) => {
-      this.handleWorkerMessage(message);
-    });
-    this.worker.on("error", (error) => {
-      for (const pendingRequest of this.pending.values()) {
-        pendingRequest.reject(error);
-      }
-      this.pending.clear();
-      this.emit("worker-error", error);
-    });
-    this.worker.on("exit", (code) => {
-      if (code !== 0) {
-        const error = new Error(`Library worker exited with code ${code}`);
-        for (const pendingRequest of this.pending.values()) {
-          pendingRequest.reject(error);
-        }
-        this.pending.clear();
-        this.emit("worker-error", error);
-      }
-    });
+    this.workerPath = path.join(__dirname, "library-worker.js");
+    this.worker = this.spawnWorker();
   }
 
   async init(): Promise<void> {
     await this.call("init", this.userDataPath);
+    this.initialized = true;
   }
 
   async addRoots(paths: string[]): Promise<ImportSummary> {
@@ -106,10 +97,34 @@ export class LibraryService extends EventEmitter {
   }
 
   async destroy(): Promise<void> {
-    await this.worker.terminate();
+    this.destroyed = true;
+    this.recovering = null;
+    const worker = this.worker;
+    this.worker = null;
+    if (worker) {
+      await worker.terminate();
+    }
   }
 
   private async call(method: WorkerCallMessage["method"], ...args: unknown[]): Promise<unknown> {
+    if (this.recovering) {
+      await this.recovering;
+    }
+
+    const worker = this.worker;
+    if (!worker || this.destroyed) {
+      throw new Error("Library worker is unavailable");
+    }
+
+    return this.dispatch(worker, method, ...args);
+  }
+
+  private dispatch(
+    worker: LibraryWorker,
+    method: WorkerCallMessage["method"],
+    ...args: unknown[]
+  ): Promise<unknown> {
+    
     const id = randomUUID();
     const message: WorkerCallMessage = {
       type: "call",
@@ -122,8 +137,61 @@ export class LibraryService extends EventEmitter {
       this.pending.set(id, { resolve, reject });
     });
 
-    this.worker.postMessage(message);
+    worker.postMessage(message);
     return result;
+  }
+
+  private spawnWorker(): LibraryWorker {
+    const worker = this.createWorker(this.workerPath);
+    worker.on("message", (message: WorkerResponseMessage) => {
+      this.handleWorkerMessage(message);
+    });
+    worker.on("error", (error) => {
+      if (this.worker !== worker) {
+        return;
+      }
+
+      void this.handleWorkerFailure(error);
+    });
+    worker.on("exit", (code) => {
+      if (this.worker !== worker || this.destroyed || code === 0) {
+        return;
+      }
+
+      void this.handleWorkerFailure(new Error(`Library worker exited with code ${code}`));
+    });
+    return worker;
+  }
+
+  private async handleWorkerFailure(error: Error): Promise<void> {
+    for (const pendingRequest of this.pending.values()) {
+      pendingRequest.reject(error);
+    }
+    this.pending.clear();
+    this.emit("worker-error", error);
+
+    if (this.destroyed || this.recovering) {
+      return;
+    }
+
+    this.worker = null;
+    this.recovering = this.recoverWorker();
+    try {
+      await this.recovering;
+    } finally {
+      this.recovering = null;
+    }
+  }
+
+  private async recoverWorker(): Promise<void> {
+    const nextWorker = this.spawnWorker();
+    this.worker = nextWorker;
+
+    if (!this.initialized) {
+      return;
+    }
+
+    await this.dispatch(nextWorker, "init", this.userDataPath);
   }
 
   private handleWorkerMessage(message: WorkerResponseMessage): void {

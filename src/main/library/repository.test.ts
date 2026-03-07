@@ -147,4 +147,29 @@ describe("LibraryRepository.queryTracks sort", () => {
 
     repository.close();
   });
+
+  it("caches prepared statements for repeated reads", () => {
+    const repository = createRepository();
+    repository.insertRoot({
+      id: "root-1",
+      path: "/music/root-1",
+      displayName: "Root 1",
+      addedAt: "2026-03-07T00:00:00.000Z"
+    });
+
+    repository.getRoots();
+    const statementCache = (repository as unknown as {
+      statementCache: Map<string, unknown>;
+    }).statementCache;
+    const sizeAfterFirstRead = statementCache.size;
+
+    repository.getRoots();
+    repository.getRoot("root-1");
+    repository.getRoot("root-1");
+
+    expect(statementCache.size).toBeGreaterThanOrEqual(sizeAfterFirstRead);
+    expect(statementCache.size).toBeLessThanOrEqual(sizeAfterFirstRead + 1);
+
+    repository.close();
+  });
 });

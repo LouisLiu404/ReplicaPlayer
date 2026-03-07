@@ -83,8 +83,6 @@ async function walkMusicFiles(rootPath: string): Promise<string[]> {
       continue;
     }
 
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-
     for (const entry of entries) {
       const entryPath = path.join(current, entry.name);
       if (entry.isDirectory()) {

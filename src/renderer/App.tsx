@@ -42,11 +42,17 @@ import {
   DEFAULT_EXPANDED_TAB_STORAGE_KEY,
   readStoredDefaultExpandedTab
 } from "./panel-preferences";
+import { LruCache } from "./lru-cache";
+import { appendRecentScanFile } from "./scan-progress";
 import {
-  DEFAULT_TRACK_SORT,
   readStoredTrackSort,
   TRACK_SORT_STORAGE_KEY
 } from "./sort-preferences";
+import {
+  type VisualEffectKey,
+  readStoredVisualEffects,
+  VISUAL_EFFECTS_STORAGE_KEY
+} from "./visual-effects-preferences";
 import { calculatePulseLevel, smoothPulse } from "./visualizer";
 
 type AvailabilityCounts = {
@@ -230,10 +236,11 @@ export function App() {
   const trackObjectUrlRef = useRef<string | null>(null);
   const sourceLoadStateRef = useRef<"idle" | "loading" | "ready">("idle");
   const activePanelTabRef = useRef<ActivePanelTab>("details");
-  const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
-  const trackDetailCacheRef = useRef(new Map<string, TrackDetail | null>());
-  const lyricsCacheRef = useRef(new Map<string, LyricPayload>());
-  const streamerCacheRef = useRef(new Map<string, StreamerVars>());
+  const trackQueryCacheRef = useRef(new LruCache<string, TrackListItem[]>(32));
+  const trackDetailCacheRef = useRef(new LruCache<string, TrackDetail | null>(256));
+  const lyricsCacheRef = useRef(new LruCache<string, LyricPayload>(256));
+  const streamerCacheRef = useRef(new LruCache<string, StreamerVars>(128));
+  const scanModalSeenFilesRef = useRef(new Map<string, Set<string>>());
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const analyserDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
@@ -278,6 +285,9 @@ export function App() {
   const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
   const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
   const [streamerVars, setStreamerVars] = useState<StreamerVars>(DEFAULT_STREAMER_VARS);
+  const [visualEffects, setVisualEffects] = useState(() =>
+    readStoredVisualEffects(window.localStorage)
+  );
 
   const deferredSearch = useDeferredValue(search);
 
@@ -572,12 +582,21 @@ export function App() {
           return current;
         }
 
+        let seenFiles = scanModalSeenFilesRef.current.get(progress.jobId);
+        if (!seenFiles) {
+          seenFiles = new Set<string>();
+          scanModalSeenFilesRef.current.set(progress.jobId, seenFiles);
+        }
+
         const nextFiles =
-          progress.currentFile && !current.files.includes(progress.currentFile)
-            ? [...current.files, progress.currentFile]
-            : current.files;
+          appendRecentScanFile(
+            current.files,
+            progress.currentFile,
+            seenFiles
+          );
 
         if (progress.phase === "completed") {
+          scanModalSeenFilesRef.current.delete(progress.jobId);
           return {
             ...current,
             status: "completed",
@@ -589,6 +608,7 @@ export function App() {
         }
 
         if (progress.phase === "error") {
+          scanModalSeenFilesRef.current.delete(progress.jobId);
           return {
             ...current,
             status: "error",
@@ -755,6 +775,14 @@ export function App() {
   }, [trackSort]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(VISUAL_EFFECTS_STORAGE_KEY, JSON.stringify(visualEffects));
+    } catch {
+      // Ignore storage failures; runtime preference still works.
+    }
+  }, [visualEffects]);
+
+  useEffect(() => {
     const artworkUrl = trackDetail?.artworkUrl;
     if (!artworkUrl) {
       setStreamerVars(DEFAULT_STREAMER_VARS);
@@ -802,7 +830,10 @@ export function App() {
     }
 
     appShell.style.setProperty("--streamer-play-state", isPlaying ? "running" : "paused");
-  }, [isPlaying, streamerVars]);
+    appShell.style.setProperty("--main-glow-enabled", visualEffects.mainBackground ? "1" : "0");
+    appShell.style.setProperty("--footer-glow-enabled", visualEffects.bottomPlayer ? "1" : "0");
+    appShell.style.setProperty("--lyrics-glow-enabled", visualEffects.lyrics ? "1" : "0");
+  }, [isPlaying, streamerVars, visualEffects]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1196,6 +1227,9 @@ export function App() {
       if (summary.addedRoots.length > 0) {
         setLibraryMessage(`Added ${summary.addedRoots.length} folder${summary.addedRoots.length === 1 ? "" : "s"}. Scanning now.`);
         const jobId = await window.library.rescan();
+        if (!scanModalSeenFilesRef.current.has(jobId)) {
+          scanModalSeenFilesRef.current.set(jobId, new Set<string>());
+        }
         setScanModal({
           jobId,
           status: "scanning",
@@ -1216,6 +1250,9 @@ export function App() {
     try {
       setLibraryError(null);
       const jobId = await window.library.rescan();
+      if (!scanModalSeenFilesRef.current.has(jobId)) {
+        scanModalSeenFilesRef.current.set(jobId, new Set<string>());
+      }
       setScanModal({
         jobId,
         status: "scanning",
@@ -1431,6 +1468,13 @@ export function App() {
     setTrackSort(sort);
   }, []);
 
+  const handleVisualEffectChange = useCallback((effect: VisualEffectKey, enabled: boolean): void => {
+    setVisualEffects((current) => ({
+      ...current,
+      [effect]: enabled
+    }));
+  }, []);
+
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
   const selectedMissingTrack = trackDetail?.availability === "missing"
@@ -1444,7 +1488,12 @@ export function App() {
       <audio ref={audioRef} />
       <ScanProgressModal
         scan={scanModal}
-        onClose={() => setScanModal(null)}
+        onClose={() => {
+          if (scanModal) {
+            scanModalSeenFilesRef.current.delete(scanModal.jobId);
+          }
+          setScanModal(null);
+        }}
         toFileLabel={toScanFileLabel}
       />
 
@@ -1518,11 +1567,13 @@ export function App() {
                 scanProgress={scanProgress}
                 defaultExpandedTab={defaultExpandedTab}
                 trackSort={trackSort}
+                visualEffects={visualEffects}
                 onAddRoots={() => void handleAddRoots()}
                 onRescan={() => void handleRescan()}
                 onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
                 onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
                 onTrackSortChange={handleTrackSortChange}
+                onVisualEffectChange={handleVisualEffectChange}
                 onOpenExternal={(url) => void window.system.openExternal(url)}
               />
             ) : (

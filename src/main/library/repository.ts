@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type {
   LibraryRoot,
@@ -192,6 +192,7 @@ function compareTitleRows(
 
 export class LibraryRepository {
   private readonly db: DatabaseSync;
+  private readonly statementCache = new Map<string, StatementSync>();
 
   constructor(databasePath: string) {
     this.db = new DatabaseSync(databasePath);
@@ -292,11 +293,23 @@ export class LibraryRepository {
   }
 
   close(): void {
+    this.statementCache.clear();
     this.db.close();
   }
 
+  private prepareCached(sql: string): StatementSync {
+    const cached = this.statementCache.get(sql);
+    if (cached) {
+      return cached;
+    }
+
+    const statement = this.db.prepare(sql);
+    this.statementCache.set(sql, statement);
+    return statement;
+  }
+
   getRoots(): LibraryRoot[] {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT
         library_roots.id,
         library_roots.path,
@@ -316,7 +329,7 @@ export class LibraryRepository {
   }
 
   getRootByPath(rootPath: string): LibraryRoot | null {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT
         library_roots.id,
         library_roots.path,
@@ -338,7 +351,7 @@ export class LibraryRepository {
   }
 
   getRoot(rootId: string): LibraryRoot | null {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT
         library_roots.id,
         library_roots.path,
@@ -365,7 +378,7 @@ export class LibraryRepository {
     displayName: string;
     addedAt: string;
   }): LibraryRoot {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       INSERT INTO library_roots (id, path, display_name, status, added_at, last_scan_at, last_error)
       VALUES (?, ?, ?, 'available', ?, NULL, NULL)
     `);
@@ -380,17 +393,17 @@ export class LibraryRepository {
   }
 
   deleteRoot(rootId: string): void {
-    const statement = this.db.prepare(`DELETE FROM library_roots WHERE id = ?`);
+    const statement = this.prepareCached(`DELETE FROM library_roots WHERE id = ?`);
     statement.run(rootId);
   }
 
   deleteTrack(trackId: string): void {
-    const statement = this.db.prepare(`DELETE FROM tracks WHERE id = ?`);
+    const statement = this.prepareCached(`DELETE FROM tracks WHERE id = ?`);
     statement.run(trackId);
   }
 
   markRoot(rootId: string, status: LibraryRootStatus, lastError: string | null, lastScanAt: string | null): void {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       UPDATE library_roots
       SET status = ?, last_error = ?, last_scan_at = ?
       WHERE id = ?
@@ -400,7 +413,7 @@ export class LibraryRepository {
   }
 
   setTrackAvailabilityForRoot(rootId: string, availability: TrackAvailability): void {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       UPDATE tracks
       SET availability = ?
       WHERE root_id = ?
@@ -410,7 +423,7 @@ export class LibraryRepository {
   }
 
   setTrackAvailability(trackId: string, availability: TrackAvailability): void {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       UPDATE tracks
       SET availability = ?
       WHERE id = ?
@@ -420,7 +433,7 @@ export class LibraryRepository {
   }
 
   getTrackStatesByRoot(rootId: string): IndexedTrackState[] {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT id, real_path, size_bytes, mtime_ms, availability, lyric_mode
       FROM tracks
       WHERE root_id = ?
@@ -437,7 +450,7 @@ export class LibraryRepository {
   }
 
   upsertTrack(track: StoredTrackRecord): void {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       INSERT INTO tracks (
         id, root_id, real_path, file_name, ext, size_bytes, mtime_ms, availability,
         duration_ms, bitrate, sample_rate, bit_depth, title, artist, album,
@@ -500,13 +513,13 @@ export class LibraryRepository {
 
   putLyrics(trackId: string, payload: LyricPayload): void {
     if (payload.mode === "none") {
-      const statement = this.db.prepare(`DELETE FROM lyrics WHERE track_id = ?`);
+      const statement = this.prepareCached(`DELETE FROM lyrics WHERE track_id = ?`);
       statement.run(trackId);
       return;
     }
 
     const now = new Date().toISOString();
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       INSERT INTO lyrics (track_id, source, mode, payload_json, updated_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(track_id) DO UPDATE SET
@@ -546,7 +559,7 @@ export class LibraryRepository {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const orderClause = trackSortOrderClause(filter.sort);
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT
         id,
         title,
@@ -574,7 +587,7 @@ export class LibraryRepository {
   }
 
   getTrack(trackId: string): TrackDetail | null {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT
         id, root_id, real_path, file_name, ext, duration_ms, artwork_hash, availability,
         bitrate, sample_rate, bit_depth, title, artist, album, album_artist,
@@ -589,7 +602,7 @@ export class LibraryRepository {
   }
 
   getLyrics(trackId: string): LyricPayload {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT payload_json
       FROM lyrics
       WHERE track_id = ?
@@ -605,7 +618,7 @@ export class LibraryRepository {
   }
 
   resolveTrackPath(trackId: string): string | null {
-    const statement = this.db.prepare(`
+    const statement = this.prepareCached(`
       SELECT real_path, availability
       FROM tracks
       WHERE id = ?
