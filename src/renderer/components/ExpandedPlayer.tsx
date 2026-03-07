@@ -26,6 +26,7 @@ interface ExpandedPlayerProps {
   onSelectTrack: (trackId: string) => void;
   onTabChange: (tab: ActivePanelTab) => void;
   setLyricRef: (index: number, element: HTMLDivElement | null) => void;
+  setLyricsScrollRef: (element: HTMLDivElement | null) => void;
 }
 
 const TABS: Array<{ id: ActivePanelTab; label: string }> = [
@@ -77,7 +78,8 @@ export function ExpandedPlayer({
   isPlaying,
   onSelectTrack,
   onTabChange,
-  setLyricRef
+  setLyricRef,
+  setLyricsScrollRef
 }: ExpandedPlayerProps) {
   const stageLabels = trackDetail
     ? [
@@ -200,7 +202,10 @@ export function ExpandedPlayer({
                     <strong>{trackDetail?.title ?? "Lyrics"}</strong>
                     <p>{trackDetail?.artist ?? "Local lyrics"}</p>
                   </div>
-                  <div className="lyrics-scroll">
+                  <div
+                    ref={setLyricsScrollRef}
+                    className="lyrics-scroll"
+                  >
                     <pre className="plain-lyrics">{lyrics.text}</pre>
                   </div>
                 </section>
@@ -219,7 +224,10 @@ export function ExpandedPlayer({
                     <strong>{trackDetail?.title ?? "Lyrics"}</strong>
                     <p>{trackDetail?.artist ?? "Local lyrics"}</p>
                   </div>
-                  <div className="lyrics-scroll synced-lyrics">
+                  <div
+                    ref={setLyricsScrollRef}
+                    className="lyrics-scroll synced-lyrics"
+                  >
                     {lyrics.lines.map((line, index) => (
                       <div
                         key={`${line.startMs}-${index}`}

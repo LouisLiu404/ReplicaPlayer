@@ -23,6 +23,7 @@ import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
+import { scrollLyricsContainer } from "./lyrics-scroll";
 import {
   cyclePlaybackMode,
   PLAYBACK_MODE_STORAGE_KEY,
@@ -177,6 +178,7 @@ function countAvailabilities(tracks: TrackListItem[]): AvailabilityCounts {
 export function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const playbackIntentRef = useRef(false);
   const trackObjectUrlRef = useRef<string | null>(null);
@@ -860,16 +862,14 @@ export function App() {
   }, [activePanelTab, isPlayerExpanded, lyrics, selectedTrackId]);
 
   useEffect(() => {
-    if (!isPlayerExpanded || activePanelTab !== "lyrics") {
+    if (!isPlayerExpanded || activePanelTab !== "lyrics" || activeLyricLine < 0) {
       return;
     }
 
+    const scrollContainer = lyricsScrollRef.current;
     const activeElement = lyricRefs.current.get(activeLyricLine);
-    if (activeElement) {
-      activeElement.scrollIntoView({
-        block: "center",
-        behavior: "smooth"
-      });
+    if (scrollContainer && activeElement) {
+      scrollLyricsContainer(scrollContainer, activeElement);
     }
   }, [activeLyricLine, activePanelTab, isPlayerExpanded]);
 
@@ -1090,6 +1090,10 @@ export function App() {
     lyricRefs.current.set(index, element);
   }
 
+  function handleSetLyricsScrollRef(element: HTMLDivElement | null): void {
+    lyricsScrollRef.current = element;
+  }
+
   function handlePlayTrack(trackId: string): void {
     playbackIntentRef.current = true;
     setPlaybackError(null);
@@ -1185,6 +1189,7 @@ export function App() {
                 onSelectTrack={setSelectedTrackId}
                 onTabChange={handlePanelTabChange}
                 setLyricRef={handleSetLyricRef}
+                setLyricsScrollRef={handleSetLyricsScrollRef}
               />
             ) : isSettingsView ? (
               <SettingsView

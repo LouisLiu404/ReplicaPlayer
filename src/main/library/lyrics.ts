@@ -104,8 +104,10 @@ function toSyncedLyrics(
 
 function normalizeEmbeddedSyncedLyrics(lyrics: ILyricsTag[]): LyricPayload | null {
   for (const lyricTag of lyrics) {
-    if (lyricTag.syncText.length > 0 && lyricTag.timeStampFormat === TimestampFormat.milliseconds) {
-      const syncedLines = lyricTag.syncText
+    const syncText = Array.isArray(lyricTag.syncText) ? lyricTag.syncText : [];
+
+    if (syncText.length > 0 && lyricTag.timeStampFormat === TimestampFormat.milliseconds) {
+      const syncedLines = syncText
         .filter((line) => typeof line.timestamp === "number" && line.text.trim().length > 0)
         .map((line) => ({
           startMs: line.timestamp ?? 0,
@@ -135,7 +137,8 @@ function normalizeEmbeddedPlainLyrics(lyrics: ILyricsTag[]): LyricPayload | null
         return lyricTag.text.trim();
       }
 
-      const joinedSyncText = lyricTag.syncText
+      const syncText = Array.isArray(lyricTag.syncText) ? lyricTag.syncText : [];
+      const joinedSyncText = syncText
         .map((line) => line.text.trim())
         .filter(Boolean)
         .join("\n");

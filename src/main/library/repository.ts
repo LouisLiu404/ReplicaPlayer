@@ -42,6 +42,7 @@ export interface IndexedTrackState {
   sizeBytes: number;
   mtimeMs: number;
   availability: TrackAvailability;
+  lyricMode: LyricPayload["mode"];
 }
 
 function formatFromExtension(ext: string): string {
@@ -308,7 +309,7 @@ export class LibraryRepository {
 
   getTrackStatesByRoot(rootId: string): IndexedTrackState[] {
     const statement = this.db.prepare(`
-      SELECT id, real_path, size_bytes, mtime_ms, availability
+      SELECT id, real_path, size_bytes, mtime_ms, availability, lyric_mode
       FROM tracks
       WHERE root_id = ?
     `);
@@ -318,7 +319,8 @@ export class LibraryRepository {
       realPath: String(row.real_path),
       sizeBytes: Number(row.size_bytes),
       mtimeMs: Number(row.mtime_ms),
-      availability: row.availability as TrackAvailability
+      availability: row.availability as TrackAvailability,
+      lyricMode: row.lyric_mode as LyricPayload["mode"]
     }));
   }
 

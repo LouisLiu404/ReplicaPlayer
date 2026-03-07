@@ -67,6 +67,29 @@ describe("normalizeLyrics", () => {
     });
   });
 
+  it("parses embedded lrc text when mp3 lyrics do not include syncText", () => {
+    const lyrics = normalizeLyrics({
+      embeddedLyrics: [
+        {
+          contentType: 0,
+          descriptor: "",
+          language: "XXX",
+          text: "[00:00.24]别辜负眼前季节\n[00:04.92]花踌躇柳轻叹敢问情何以堪"
+        } as any
+      ]
+    });
+
+    expect(lyrics).toEqual({
+      mode: "synced",
+      source: "embedded-synced",
+      offsetMs: 0,
+      lines: [
+        { startMs: 240, text: "别辜负眼前季节" },
+        { startMs: 4920, text: "花踌躇柳轻叹敢问情何以堪" }
+      ]
+    });
+  });
+
   it("falls back to plain text lyrics", () => {
     const lyrics = normalizeLyrics({
       externalTxtText: "plain local lyrics"

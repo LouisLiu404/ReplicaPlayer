@@ -1,17 +1,20 @@
 # Replica Player
 
-Replica Player is a macOS-only Electron music player for local files. It indexes music in place, persists library roots between launches, reads embedded metadata, shows album art, and displays local synced or plain lyrics.
+Replica Player is a macOS-only Electron music player for local files. It keeps a persistent indexed library of tracked folders, reads embedded metadata and artwork, plays local audio through Chromium, and renders local synced or plain lyrics.
 
-## Features
+## Current State
 
-- Persistent local library management. Imported folders are stored and do not need to be re-added on every launch.
-- Supported playback formats: `mp3`, `flac`, `ogg`, `oga`.
-- Metadata parsing with [`music-metadata`](https://www.npmjs.com/package/music-metadata):
+- Desktop app shell built with Electron Forge, webpack, React, and TypeScript
+- Fixed-size movable macOS window: `1500 x 800`
+- Persistent tracked folders managed from the in-app `Settings` view
+- Local library indexing with SQLite under Electron `userData`
+- Playback support for `mp3`, `flac`, `ogg`, and `oga`
+- Metadata display:
   - title
   - artist
   - album
   - album artist
-  - track and disc numbers
+  - track / disc numbers
   - year
   - genre
   - duration
@@ -21,51 +24,52 @@ Replica Player is a macOS-only Electron music player for local files. It indexes
   - embedded artwork
 - Lyrics support:
   - adjacent `.lrc`
-  - embedded synced lyrics
+  - embedded timestamped lyrics stored in text lyric frames
+  - embedded synced lyric frames
   - embedded plain lyrics
   - adjacent `.txt`
-- Real-time synced lyric highlighting.
-- Manual rescan flow with a modal progress view that lists scanned file names in order.
-- Cached folder-playlist queries and explicit loading states for faster folder switching.
-- Missing-track cleanup prompt so deleted files can be removed from the library index.
-- Fixed-size movable desktop window tuned for the current macOS layout.
-- Three playback modes with persistence across restarts:
-  - repeat current folder scope
-  - repeat current track
-  - shuffle
-- Footer progress scrubbing uses the full top edge of the player bar instead of a separate center slider.
-- Sandboxed renderer with preload-only IPC and custom protocols instead of direct `file://` access.
+- Real-time synced lyric highlighting in the expanded player
+- Queue, lyrics, and details tabs in the expanded player
+- Bottom player with:
+  - transport controls
+  - repeat-all / repeat-one / shuffle
+  - top-edge seek bar
+  - persistent volume
+- Folder rescan modal with live progress and scanned file names
+- Missing-track detection and cleanup prompt
+- Sandboxed renderer with preload-only IPC and custom `replica-media://` protocol access
 
-## Stack
+## Tech Stack
 
 - Electron 40
 - Electron Forge + webpack
-- React 19 + TypeScript
-- Heroicons
+- React 19
+- TypeScript
 - `music-metadata`
 - `node:sqlite`
+- Heroicons
 
 ## Requirements
 
 - macOS
-- Node.js 24 or newer
+- Node.js 24+
 - npm
 
-## Getting Started
-
-Install dependencies:
+## Install
 
 ```bash
 npm install
 ```
 
-Run the app in development:
+## Development
+
+Start the app in development:
 
 ```bash
 npm start
 ```
 
-Type-check:
+Run type-checking:
 
 ```bash
 npm run typecheck
@@ -77,10 +81,18 @@ Run tests:
 npm test
 ```
 
-Build a packaged app:
+## Build
+
+Create a packaged app bundle:
 
 ```bash
 npm run package
+```
+
+This writes the packaged app under `out/`, for example:
+
+```text
+out/Replica Player-darwin-arm64/Replica Player.app
 ```
 
 Create Forge distributables:
@@ -89,66 +101,61 @@ Create Forge distributables:
 npm run make
 ```
 
-## How It Works
+The current Forge setup produces a macOS ZIP target.
 
-1. Open `Settings` from the sidebar and add one or more music folders.
-2. Replica Player stores the canonical root paths under Electron `userData`.
-3. A manual rescan opens a modal, walks each saved root, parses changed files, and updates the SQLite index.
-4. The renderer queries the indexed library over preload IPC.
-5. Playback and artwork are served through a privileged custom protocol and converted to `blob:` URLs in the renderer.
+## Usage
 
-## Playback Controls
+1. Open `Settings`.
+2. Add one or more local music folders.
+3. Replica Player immediately starts a rescan and shows scan progress in a modal.
+4. Select `All folders` or an individual tracked folder from the left rail.
+5. Double-click a track to play it.
+6. Click the footer cover art or chevron to open the expanded player.
 
-- Double-click a track row to start playback immediately.
-- Click the cover art or the chevron in the footer to open the expanded player.
-- The footer mode button cycles `repeat scope -> repeat track -> shuffle`.
-- Volume defaults to `100%` and is restored across launches.
+## Lyrics Resolution Order
 
-## Lyrics Priority
+Replica Player resolves lyrics in this order:
 
-Lyrics are resolved in this order:
-
-1. adjacent same-name `.lrc`
+1. adjacent `.lrc`
 2. embedded synced lyrics
-3. embedded plain lyrics
-4. adjacent same-name `.txt`
+3. embedded text lyrics that contain LRC timestamps
+4. embedded plain lyrics
+5. adjacent `.txt`
 
-Synced lyrics are normalized into timestamped line entries and highlighted against the current playback position.
+Synced lyrics are normalized into timestamped line entries before rendering.
 
-## Persistence
+## Library And Persistence
 
-App data is stored in Electron `userData` and includes:
+Tracked folders are stored between launches. The app indexes files in place and does not copy music into an app-managed library.
+
+Electron `userData` stores:
 
 - `library.sqlite`
 - `artwork/`
-- saved library root metadata
+- saved root metadata
 
-The app indexes files in place. It does not copy music into an app-managed media folder.
+## Scan Behavior
 
-## Scan UX
+- Adding folders triggers an immediate rescan
+- Manual rescans use the same modal
+- Unchanged files are skipped unless the app needs to refresh stale lyric metadata
+- Missing files are marked missing on rescan
+- Missing tracks can be removed from the library index from the UI
+- Unavailable roots remain tracked and are marked offline instead of being deleted
 
-- Adding folders triggers an immediate rescan modal.
-- Manual rescans use the same modal.
-- The modal shows:
-  - current scan phase
-  - processed vs discovered file counts
-  - scanned file names in order
-  - an `OK` button when the scan completes or fails
+## Playback Notes
+
+- Chromium handles decoding for playback
+- `ogg` support depends on whether the codec inside the container is supported by Chromium
+- Playback mode defaults to `repeat-all` and persists across restarts
+- Volume defaults to `100%` and persists across restarts
 
 ## Performance Notes
 
-- Folder playlist queries are cached between rescans, so switching back to an already-opened folder scope is immediate.
-- Search input uses deferred updates to avoid blocking the renderer on rapid typing.
-- When a query still takes time, the app shows explicit loading UI instead of leaving the track list looking unresponsive.
-
-## Tests
-
-The test suite includes regression coverage for:
-
-- synced/external lyric parsing precedence
-- fixed-size but movable main-window options
-- persisted playback-mode defaults and cycling
-- sidebar folder-scope loading copy and click behavior
+- Folder track queries are cached between reloads
+- Search uses deferred updates
+- The UI shows explicit loading states while library queries refresh
+- Artwork-derived animated streamer effects are scoped to the lyrics surface, not the entire app shell
 
 ## Project Layout
 
@@ -163,48 +170,48 @@ src/
       scanner.ts
     main.ts
     protocols.ts
+    window-options.ts
   renderer/
+    components/
     App.tsx
     index.tsx
+    lyrics-scroll.ts
+    playback.ts
+    streamer.ts
     styles.css
+    utils.ts
   preload.ts
   shared/
     types.ts
 ```
 
-## Architecture
+## Tests
 
-- Main process:
-  - creates the window
-  - registers IPC handlers
-  - registers custom protocols
-- Library worker:
-  - owns SQLite access
-  - scans folders
-  - parses metadata and lyrics
-  - resolves media and artwork paths
-- Renderer:
-  - shows library state
-  - manages playback UI
-  - renders metadata and lyrics
+The current test suite covers:
 
-## Current Limitations
+- lyric parsing and precedence
+- MP3 embedded LRC-in-text normalization
+- lyrics scroll centering
+- window option regressions
+- playback mode cycling and persistence helpers
+- navigation rail behavior
+
+## Limitations
 
 - macOS only
-- fixed-size window, no user resizing
-- manual rescan only, no background file watching
-- local lyrics only, no online lyric provider
+- fixed-size window
+- manual rescan only, no background watching
+- local files only
 - no playlists
-- no streaming services
+- no streaming integrations
 - no cloud sync
-- Ogg support depends on Chromium being able to decode the codec inside the Ogg container
-- `node:sqlite` may print an experimental warning on startup
+- `node:sqlite` may emit an experimental warning at startup
 
 ## Troubleshooting
 
-If you change webpack, Forge, CSP, or protocol configuration during development, stop the current dev process and run `npm start` again. Restarting only the Electron main process does not refresh the webpack dev-server headers.
-
-If playback fails for a specific Ogg file, the container may be valid while the embedded codec is not supported by Chromium.
+- If development behavior looks stale after changing webpack, CSP, preload, or protocol code, stop the current process and run `npm start` again.
+- If an already-indexed MP3 was missing embedded lyrics before a parser fix, run a manual rescan once to refresh the stored lyric payload.
+- If an Ogg file fails to play, the container may be valid while the embedded codec is not supported by Chromium.
 
 ## License
 

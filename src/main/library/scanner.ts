@@ -279,11 +279,15 @@ export class LibraryScanner {
         const normalizedFilePath = path.resolve(filePath);
         const existingTrack = existingTracks.get(normalizedFilePath);
         seenPaths.add(normalizedFilePath);
+        const needsMp3LyricRefresh =
+          existingTrack?.lyricMode === "none" &&
+          path.extname(normalizedFilePath).toLowerCase() === ".mp3";
 
         if (
           existingTrack &&
           existingTrack.sizeBytes === stat.size &&
-          existingTrack.mtimeMs === Math.trunc(stat.mtimeMs)
+          existingTrack.mtimeMs === Math.trunc(stat.mtimeMs) &&
+          !needsMp3LyricRefresh
         ) {
           this.repository.setTrackAvailability(existingTrack.id, "available");
           processedFiles += 1;
