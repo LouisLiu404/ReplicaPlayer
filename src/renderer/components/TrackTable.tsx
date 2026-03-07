@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { TrackListItem } from "../../shared/types";
 import { availabilityLabel, formatDuration } from "../utils";
 import { EmptyState } from "./EmptyState";
@@ -16,7 +18,7 @@ interface TrackTableProps {
   onPlayTrack: (trackId: string) => void;
 }
 
-export function TrackTable({
+export const TrackTable = memo(function TrackTable({
   tracks,
   selectedTrackId,
   hasRoots,
@@ -131,4 +133,4 @@ export function TrackTable({
       </div>
     </section>
   );
-}
+});

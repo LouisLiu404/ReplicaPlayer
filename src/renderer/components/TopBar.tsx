@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { RefObject } from "react";
 
 import type { ScanProgress } from "../../shared/types";
@@ -10,7 +12,7 @@ interface TopBarProps {
   onSearchChange: (value: string) => void;
 }
 
-export function TopBar({
+export const TopBar = memo(function TopBar({
   search,
   searchInputRef,
   scanProgress,
@@ -54,4 +56,4 @@ export function TopBar({
       </div>
     </header>
   );
-}
+});

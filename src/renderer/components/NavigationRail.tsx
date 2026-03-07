@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { LibraryRoot } from "../../shared/types";
 import type { AppView } from "./ui-types";
 import { PlayerGlyph, ReplicaWordmark, SettingsIcon } from "./icons";
@@ -11,7 +13,7 @@ interface NavigationRailProps {
   onOpenSettings: () => void;
 }
 
-export function NavigationRail({
+export const NavigationRail = memo(function NavigationRail({
   activeView,
   roots,
   selectedRootId,
@@ -79,4 +81,4 @@ export function NavigationRail({
       </div>
     </aside>
   );
-}
+});

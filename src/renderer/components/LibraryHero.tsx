@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import type { AvailabilityFilter } from "./ui-types";
 
 interface FilterCounts {
@@ -17,7 +19,7 @@ interface LibraryHeroProps {
   onFilterChange: (filter: AvailabilityFilter) => void;
 }
 
-export function LibraryHero({
+export const LibraryHero = memo(function LibraryHero({
   currentRootLabel,
   isLoading,
   visibleTrackCount,
@@ -78,4 +80,4 @@ export function LibraryHero({
       ) : null}
     </section>
   );
-}
+});

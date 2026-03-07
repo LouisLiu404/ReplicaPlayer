@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 
 import type { LibraryRoot, ScanProgress } from "../../shared/types";
+import type { ActivePanelTab } from "./ui-types";
 import { scanPhaseLabel } from "../utils";
 import { EmptyState } from "./EmptyState";
 import { FolderIcon, PlusIcon, RefreshIcon, SettingsIcon } from "./icons";
@@ -8,9 +9,11 @@ import { FolderIcon, PlusIcon, RefreshIcon, SettingsIcon } from "./icons";
 interface SettingsViewProps {
   roots: LibraryRoot[];
   scanProgress: ScanProgress | null;
+  defaultExpandedTab: ActivePanelTab;
   onAddRoots: () => void;
   onRescan: () => void;
   onRemoveRoot: (rootId: string) => void;
+  onDefaultExpandedTabChange: (tab: ActivePanelTab) => void;
   onOpenExternal: (url: string) => void;
 }
 
@@ -20,11 +23,19 @@ const MISANS_LICENSE_URL = "https://hyperos.mi.com/font-download/MiSans%E5%AD%97
 export function SettingsView({
   roots,
   scanProgress,
+  defaultExpandedTab,
   onAddRoots,
   onRescan,
   onRemoveRoot,
+  onDefaultExpandedTabChange,
   onOpenExternal
 }: SettingsViewProps) {
+  const expandedTabOptions: Array<{ id: ActivePanelTab; label: string; description: string }> = [
+    { id: "queue", label: "Up Next", description: "Open the queue first." },
+    { id: "lyrics", label: "Lyrics", description: "Open synced or plain lyrics first." },
+    { id: "details", label: "Details", description: "Open technical metadata first." }
+  ];
+
   function handleExternalLinkClick(
     event: MouseEvent<HTMLAnchorElement>,
     url: string
@@ -95,6 +106,29 @@ export function SettingsView({
           ))}
         </div>
       )}
+
+      <section className="settings-section-card" aria-labelledby="expanded-player-default-tab">
+        <div className="settings-section-copy">
+          <h2 id="expanded-player-default-tab">Expanded player default tab</h2>
+          <p>Choose which panel opens first when you expand the player from the bottom bar.</p>
+        </div>
+
+        <div className="settings-tab-option-row" role="radiogroup" aria-label="Expanded player default tab">
+          {expandedTabOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={defaultExpandedTab === option.id}
+              className={`settings-tab-option ${defaultExpandedTab === option.id ? "active" : ""}`}
+              onClick={() => onDefaultExpandedTabChange(option.id)}
+            >
+              <strong>{option.label}</strong>
+              <span>{option.description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="settings-notice-card" aria-labelledby="misans-notice-title">
         <h2 id="misans-notice-title">MiSans Font Notice (Xiaomi)</h2>

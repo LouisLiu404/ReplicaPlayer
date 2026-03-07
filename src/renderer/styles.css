@@ -1110,13 +1110,13 @@ img {
   width: 100%;
   min-height: 0;
   height: 100%;
-  aspect-ratio: auto;
+  aspect-ratio: 1 / 1;
 }
 
 .expanded-stage-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 30px;
 }
 
@@ -1612,6 +1612,7 @@ img {
 }
 
 .settings-hero,
+.settings-section-card,
 .settings-root-card,
 .settings-scan-banner {
   border-radius: 24px;
@@ -1732,6 +1733,71 @@ img {
   transform: translateY(-1px);
 }
 
+.settings-section-card {
+  display: grid;
+  gap: 18px;
+  padding: 24px 28px;
+}
+
+.settings-section-copy h2 {
+  margin: 0;
+  font-size: 1.24rem;
+  line-height: 1.2;
+}
+
+.settings-section-copy p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.settings-tab-option-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-tab-option {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
+}
+
+.settings-tab-option strong,
+.settings-tab-option span {
+  display: block;
+}
+
+.settings-tab-option strong {
+  color: var(--text-primary);
+  font-size: 0.98rem;
+}
+
+.settings-tab-option span {
+  line-height: 1.5;
+}
+
+.settings-tab-option:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.settings-tab-option.active {
+  border-color: rgba(255, 107, 90, 0.4);
+  background: linear-gradient(135deg, rgba(255, 107, 90, 0.15), rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+}
+
 .settings-notice-card {
   border-radius: 24px;
   border: 1px solid var(--border);
@@ -1847,17 +1913,28 @@ img {
 
 .bottom-player-progress-shell {
   position: absolute;
-  inset: 0 0 auto;
-  height: 28px;
+  left: 0;
+  right: 0;
+  top: calc((var(--player-progress-thickness) - 20px) / 2);
+  height: 20px;
   display: flex;
   align-items: flex-start;
   z-index: 1;
+  --player-progress-thickness: 4px;
+  transition:
+    top 140ms ease,
+    height 140ms ease;
+}
+
+.bottom-player-progress-shell:hover,
+.bottom-player-progress-shell:focus-within {
+  --player-progress-thickness: 8px;
 }
 
 .bottom-player-progress {
   appearance: none;
   width: 100%;
-  height: 28px;
+  height: 20px;
   margin: 0;
   background: transparent;
   cursor: pointer;
@@ -1868,7 +1945,7 @@ img {
 }
 
 .bottom-player-progress::-webkit-slider-runnable-track {
-  height: 8px;
+  height: var(--player-progress-thickness);
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.94) 0,
@@ -1879,12 +1956,12 @@ img {
 }
 
 .bottom-player-progress::-moz-range-track {
-  height: 8px;
+  height: var(--player-progress-thickness);
   background: rgba(255, 255, 255, 0.2);
 }
 
 .bottom-player-progress::-moz-range-progress {
-  height: 8px;
+  height: var(--player-progress-thickness);
   background: rgba(255, 255, 255, 0.94);
 }
 
@@ -1892,7 +1969,7 @@ img {
   appearance: none;
   width: 14px;
   height: 14px;
-  margin-top: -3px;
+  margin-top: calc((var(--player-progress-thickness) - 14px) / 2);
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
@@ -1934,7 +2011,7 @@ img {
 
 .bottom-player-progress-tooltip {
   position: absolute;
-  top: 14px;
+  top: 10px;
   transform: translate(-50%, -100%);
   padding: 6px 10px;
   border-radius: 999px;
@@ -2086,7 +2163,8 @@ img {
 }
 
 .volume-control input {
-  width: 100%;
+  width: 152px;
+  flex: 0 0 152px;
 }
 
 .bottom-player-trailing {
@@ -2097,7 +2175,7 @@ img {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 210px;
+  min-width: 180px;
 }
 
 .volume-icon {
@@ -2149,6 +2227,7 @@ img {
 
 .volume-slider::-webkit-slider-runnable-track {
   height: 4px;
+  border-radius: 999px;
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.96) 0,
@@ -2160,11 +2239,13 @@ img {
 
 .volume-slider::-moz-range-track {
   height: 4px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
 }
 
 .volume-slider::-moz-range-progress {
   height: 4px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -2355,6 +2436,10 @@ img {
 
   .settings-hero {
     flex-direction: column;
+  }
+
+  .settings-tab-option-row {
+    grid-template-columns: 1fr;
   }
 
   .settings-actions {

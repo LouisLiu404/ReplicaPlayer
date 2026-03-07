@@ -176,6 +176,21 @@ export class LibraryRepository {
 
       CREATE INDEX IF NOT EXISTS idx_tracks_root_id ON tracks(root_id);
       CREATE INDEX IF NOT EXISTS idx_tracks_title_artist_album ON tracks(title, artist, album);
+      CREATE INDEX IF NOT EXISTS idx_tracks_sort ON tracks(
+        artist COLLATE NOCASE,
+        album COLLATE NOCASE,
+        disc_no,
+        track_no,
+        title COLLATE NOCASE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tracks_root_sort ON tracks(
+        root_id,
+        artist COLLATE NOCASE,
+        album COLLATE NOCASE,
+        disc_no,
+        track_no,
+        title COLLATE NOCASE
+      );
     `);
   }
 
@@ -424,10 +439,10 @@ export class LibraryRepository {
     if (normalizedSearch) {
       const likeTerm = `%${normalizedSearch}%`;
       conditions.push(`(
-        lower(title) LIKE ?
-        OR lower(artist) LIKE ?
-        OR lower(album) LIKE ?
-        OR lower(file_name) LIKE ?
+        title LIKE ? COLLATE NOCASE
+        OR artist LIKE ? COLLATE NOCASE
+        OR album LIKE ? COLLATE NOCASE
+        OR file_name LIKE ? COLLATE NOCASE
       )`);
       parameters.push(likeTerm, likeTerm, likeTerm, likeTerm);
     }
@@ -437,7 +452,12 @@ export class LibraryRepository {
       SELECT id, title, artist, album, duration_ms, artwork_hash, ext, availability
       FROM tracks
       ${whereClause}
-      ORDER BY lower(artist), lower(album), disc_no, track_no, lower(title)
+      ORDER BY
+        artist COLLATE NOCASE,
+        album COLLATE NOCASE,
+        IFNULL(disc_no, 0),
+        IFNULL(track_no, 0),
+        title COLLATE NOCASE
     `);
 
     return (statement.all(...parameters) as Record<string, unknown>[]).map(mapTrackListItem);

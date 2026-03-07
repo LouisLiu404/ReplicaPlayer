@@ -1,5 +1,6 @@
 import {
   startTransition,
+  useCallback,
   useDeferredValue,
   useEffect,
   useEffectEvent,
@@ -35,6 +36,10 @@ import {
   extractStreamerVars,
   type StreamerVars
 } from "./streamer";
+import {
+  DEFAULT_EXPANDED_TAB_STORAGE_KEY,
+  readStoredDefaultExpandedTab
+} from "./panel-preferences";
 import { calculatePulseLevel, smoothPulse } from "./visualizer";
 
 type AvailabilityCounts = {
@@ -186,6 +191,8 @@ export function App() {
   const trackObjectUrlRef = useRef<string | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new Map<string, TrackListItem[]>());
+  const trackDetailCacheRef = useRef(new Map<string, TrackDetail | null>());
+  const lyricsCacheRef = useRef(new Map<string, LyricPayload>());
   const streamerCacheRef = useRef(new Map<string, StreamerVars>());
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -215,7 +222,12 @@ export function App() {
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [activeLyricLine, setActiveLyricLine] = useState(-1);
-  const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>("details");
+  const [defaultExpandedTab, setDefaultExpandedTab] = useState<ActivePanelTab>(() =>
+    readStoredDefaultExpandedTab(window.localStorage)
+  );
+  const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>(() =>
+    readStoredDefaultExpandedTab(window.localStorage)
+  );
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() =>
     readStoredPlaybackMode(window.localStorage)
@@ -383,6 +395,8 @@ export function App() {
 
   useEffect(() => {
     trackQueryCacheRef.current.clear();
+    trackDetailCacheRef.current.clear();
+    lyricsCacheRef.current.clear();
   }, [reloadTick]);
 
   const availabilityCounts = countAvailabilities(libraryTracks);
@@ -432,6 +446,24 @@ export function App() {
 
     async function loadTrack(): Promise<void> {
       try {
+        const hasCachedTrackDetail = trackDetailCacheRef.current.has(trackId);
+        const hasCachedLyrics = lyricsCacheRef.current.has(trackId);
+        if (hasCachedTrackDetail && hasCachedLyrics) {
+          const cachedTrackDetail = trackDetailCacheRef.current.get(trackId) ?? null;
+          const cachedLyrics = lyricsCacheRef.current.get(trackId) ?? { mode: "none", source: "none" };
+
+          if (!cachedTrackDetail) {
+            setSelectedTrackId((current) => (current === trackId ? null : current));
+            return;
+          }
+
+          startTransition(() => {
+            setTrackDetail(cachedTrackDetail);
+            setLyrics(cachedLyrics);
+          });
+          return;
+        }
+
         const [nextTrackDetail, nextLyrics] = await Promise.all([
           window.library.getTrack(trackId),
           window.library.getLyrics(trackId)
@@ -442,9 +474,14 @@ export function App() {
         }
 
         if (!nextTrackDetail) {
+          trackDetailCacheRef.current.set(trackId, null);
+          lyricsCacheRef.current.set(trackId, { mode: "none", source: "none" });
           setSelectedTrackId((current) => (current === trackId ? null : current));
           return;
         }
+
+        trackDetailCacheRef.current.set(trackId, nextTrackDetail);
+        lyricsCacheRef.current.set(trackId, nextLyrics);
 
         startTransition(() => {
           setTrackDetail(nextTrackDetail);
@@ -631,6 +668,14 @@ export function App() {
       // Ignore storage failures; runtime playback mode still works.
     }
   }, [playbackMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DEFAULT_EXPANDED_TAB_STORAGE_KEY, defaultExpandedTab);
+    } catch {
+      // Ignore storage failures; runtime preference still works.
+    }
+  }, [defaultExpandedTab]);
 
   useEffect(() => {
     const artworkUrl = trackDetail?.artworkUrl;
@@ -863,9 +908,6 @@ export function App() {
   const handleAudioPlay = useEffectEvent(() => {
     setIsPlaying(true);
     setPlaybackError(null);
-    if (activePanelTabRef.current !== "lyrics") {
-      setActivePanelTab("queue");
-    }
   });
 
   const handleAudioPause = useEffectEvent(() => {
@@ -1213,53 +1255,58 @@ export function App() {
     }
   }
 
-  function handlePanelTabChange(tab: ActivePanelTab): void {
+  const handlePanelTabChange = useCallback((tab: ActivePanelTab): void => {
     setActivePanelTab(tab);
     setIsPlayerExpanded(true);
-  }
+  }, []);
 
-  function handleSelectRoot(rootId: string): void {
+  const handleSelectRoot = useCallback((rootId: string): void => {
     if (selectedRootId === rootId && activeView === "library") {
       return;
     }
-    setSelectedRootId(rootId);
-    setActiveView("library");
-  }
+    startTransition(() => {
+      setIsPlayerExpanded(false);
+      setSelectedRootId(rootId);
+      setActiveView("library");
+    });
+  }, [activeView, selectedRootId]);
 
-  function handleAvailabilityFilterChange(filter: AvailabilityFilter): void {
+  const handleAvailabilityFilterChange = useCallback((filter: AvailabilityFilter): void => {
     setAvailabilityFilter((current) => (current === filter ? "all" : filter));
-  }
+  }, []);
 
-  function handleOpenSettings(): void {
+  const handleOpenSettings = useCallback((): void => {
     setActiveView("settings");
-  }
+  }, []);
 
-  function handleTogglePanel(): void {
-    if (!isPlayerExpanded && isPlaying && activePanelTabRef.current !== "lyrics") {
-      setActivePanelTab("queue");
+  const handleTogglePanel = useCallback((): void => {
+    if (!isPlayerExpanded) {
+      setActivePanelTab(defaultExpandedTab);
+      setIsPlayerExpanded(true);
+      return;
     }
 
-    setIsPlayerExpanded((current) => !current);
-  }
+    setIsPlayerExpanded(false);
+  }, [defaultExpandedTab, isPlayerExpanded]);
 
-  function handleCyclePlaybackMode(): void {
+  const handleCyclePlaybackMode = useCallback((): void => {
     setPlaybackMode((current) => cyclePlaybackMode(current));
-  }
+  }, []);
 
-  function handleVolumeChange(nextVolumePercent: number): void {
+  const handleVolumeChange = useCallback((nextVolumePercent: number): void => {
     const clampedVolume = Math.min(Math.max(nextVolumePercent, 0), 100);
     setVolumePercent(clampedVolume);
-  }
+  }, []);
 
-  function handleSetLyricRef(index: number, element: HTMLDivElement | null): void {
+  const handleSetLyricRef = useCallback((index: number, element: HTMLDivElement | null): void => {
     lyricRefs.current.set(index, element);
-  }
+  }, []);
 
-  function handleSetLyricsScrollRef(element: HTMLDivElement | null): void {
+  const handleSetLyricsScrollRef = useCallback((element: HTMLDivElement | null): void => {
     lyricsScrollRef.current = element;
-  }
+  }, []);
 
-  function handlePlayTrack(trackId: string): void {
+  const handlePlayTrack = useCallback((trackId: string): void => {
     playbackIntentRef.current = true;
     setPlaybackError(null);
 
@@ -1283,7 +1330,14 @@ export function App() {
       playbackIntentRef.current = false;
       setPlaybackError(playbackRejectionMessage(trackDetail, error));
     });
-  }
+  }, [selectedTrackId, trackDetail]);
+
+  const handleDefaultExpandedTabChange = useCallback((tab: ActivePanelTab): void => {
+    setDefaultExpandedTab(tab);
+    if (!isPlayerExpanded) {
+      setActivePanelTab(tab);
+    }
+  }, [isPlayerExpanded]);
 
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
@@ -1360,9 +1414,11 @@ export function App() {
               <SettingsView
                 roots={roots}
                 scanProgress={scanProgress}
+                defaultExpandedTab={defaultExpandedTab}
                 onAddRoots={() => void handleAddRoots()}
                 onRescan={() => void handleRescan()}
                 onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
+                onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
                 onOpenExternal={(url) => void window.system.openExternal(url)}
               />
             ) : (
