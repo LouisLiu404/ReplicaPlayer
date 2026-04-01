@@ -13,15 +13,15 @@ describe("readStoredVisualEffects", () => {
   it("reads stored toggles and falls back missing values", () => {
     const storage = {
       getItem: () => JSON.stringify({
-        mainBackground: false,
-        lyrics: false
+        mainBackground: true,
+        lyrics: true
       })
     };
 
     expect(readStoredVisualEffects(storage)).toEqual({
-      mainBackground: false,
-      bottomPlayer: true,
-      lyrics: false
+      mainBackground: true,
+      bottomPlayer: false,
+      lyrics: true
     });
   });
 

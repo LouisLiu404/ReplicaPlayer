@@ -7,6 +7,11 @@ import {
 } from "react";
 
 import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/types";
+import {
+  hasLyricTranslations,
+  lyricSourceBadge,
+  splitLyricDisplayParts
+} from "../lyrics-display";
 import type { StreamerVars } from "../streamer";
 import { calculateVirtualWindow, type VirtualWindow } from "../virtual-list";
 import {
@@ -14,8 +19,7 @@ import {
   formatBitDepthCompact,
   formatDuration,
   formatNumber,
-  formatSampleRateCompact,
-  lyricsSourceLabel
+  formatSampleRateCompact
 } from "../utils";
 import type { ActivePanelTab } from "./ui-types";
 import { DiscIcon, LyricsIcon, MusicNoteIcon, QueueIcon } from "./icons";
@@ -46,38 +50,6 @@ const TABS: Array<{ id: ActivePanelTab; label: string }> = [
 const QUEUE_ROW_HEIGHT = 80;
 const QUEUE_OVERSCAN = 8;
 
-function splitLyricParts(text: string): string[] {
-  const normalized = text.trim();
-  if (!normalized) {
-    return ["…"];
-  }
-
-  const lineBreakParts = normalized
-    .split(/\r?\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (lineBreakParts.length > 1) {
-    return lineBreakParts;
-  }
-
-  const latinThenCjk = normalized.match(
-    /^(.+?\p{Script=Latin}[\p{Script=Latin}\p{Number}\p{Punctuation}\p{Symbol}\s]*?)\s+([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}].+)$/u
-  );
-  if (latinThenCjk) {
-    return [latinThenCjk[1].trim(), latinThenCjk[2].trim()];
-  }
-
-  const cjkThenLatin = normalized.match(
-    /^([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Punctuation}\s]+)\s+(.+?\p{Script=Latin}.+)$/u
-  );
-  if (cjkThenLatin) {
-    return [cjkThenLatin[1].trim(), cjkThenLatin[2].trim()];
-  }
-
-  return [normalized];
-}
-
 export function ExpandedPlayer({
   activeTab,
   selectedTrackId,
@@ -96,6 +68,7 @@ export function ExpandedPlayer({
   const queueScrollRef = useRef<HTMLDivElement | null>(null);
   const queueBaseIndex = queueStartIndex >= 0 ? queueStartIndex : -1;
   const queueCount = queueBaseIndex >= 0 ? Math.max(0, queueTracks.length - queueBaseIndex) : 0;
+  const [showLyricTranslations, setShowLyricTranslations] = useState(true);
   const [queueWindow, setQueueWindow] = useState<VirtualWindow>(() =>
     calculateVirtualWindow({
       itemCount: queueCount,
@@ -178,6 +151,8 @@ export function ExpandedPlayer({
         availabilityDescription(trackDetail.availability)
       ].filter((value): value is string => Boolean(value))
     : [];
+  const lyricsHaveTranslations = hasLyricTranslations(lyrics);
+  const lyricsSource = lyricSourceBadge(lyrics.source);
 
   return (
     <section className="expanded-player">
@@ -300,11 +275,15 @@ export function ExpandedPlayer({
                   } as CSSProperties}
                 >
                   <div className="lyrics-stage-head">
-                    <div className="context-meta-row">
-                      <span>{lyricsSourceLabel(lyrics.source)}</span>
+                    <div className="lyrics-stage-copy">
+                      <strong>{trackDetail?.title ?? "Lyrics"}</strong>
+                      <p>{trackDetail?.artist ?? "Local lyrics"}</p>
                     </div>
-                    <strong>{trackDetail?.title ?? "Lyrics"}</strong>
-                    <p>{trackDetail?.artist ?? "Local lyrics"}</p>
+                    <div className="lyrics-stage-toolbar">
+                      {lyricsSource ? (
+                        <span className="lyrics-stage-badge">{lyricsSource.toLowerCase()}</span>
+                      ) : null}
+                    </div>
                   </div>
                   <div
                     ref={setLyricsScrollRef}
@@ -322,11 +301,29 @@ export function ExpandedPlayer({
                   } as CSSProperties}
                 >
                   <div className="lyrics-stage-head">
-                    <div className="context-meta-row">
-                      <span>{lyricsSourceLabel(lyrics.source)}</span>
+                    <div className="lyrics-stage-copy">
+                      <strong>{trackDetail?.title ?? "Lyrics"}</strong>
+                      <p>{trackDetail?.artist ?? "Local lyrics"}</p>
                     </div>
-                    <strong>{trackDetail?.title ?? "Lyrics"}</strong>
-                    <p>{trackDetail?.artist ?? "Local lyrics"}</p>
+                    <div className="lyrics-stage-toolbar">
+                      {lyricsHaveTranslations ? (
+                        <button
+                          type="button"
+                          className={`lyrics-translation-toggle ${showLyricTranslations ? "active" : ""}`}
+                          onClick={() => {
+                            setShowLyricTranslations((current) => !current);
+                          }}
+                          aria-pressed={showLyricTranslations}
+                          aria-label={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
+                          title={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
+                        >
+                          译
+                        </button>
+                      ) : null}
+                      {lyricsSource ? (
+                        <span className="lyrics-stage-badge">{lyricsSource.toLowerCase()}</span>
+                      ) : null}
+                    </div>
                   </div>
                   <div
                     ref={setLyricsScrollRef}
@@ -340,14 +337,24 @@ export function ExpandedPlayer({
                         }}
                         className={`lyric-line-group ${activeLyricLine === index ? "active" : ""}`}
                       >
-                        {splitLyricParts(line.text).map((part, partIndex) => (
-                          <div
-                            key={`${line.startMs}-${index}-${partIndex}`}
-                            className={`lyric-line ${partIndex === 0 ? "primary" : "secondary"}`}
-                          >
-                            {part}
-                          </div>
-                        ))}
+                        {(() => {
+                          const parts = splitLyricDisplayParts(line.text);
+                          return (
+                            <>
+                              <div className="lyric-line primary">{parts.primary}</div>
+                              {showLyricTranslations
+                                ? parts.secondary.map((part, partIndex) => (
+                                    <div
+                                      key={`${line.startMs}-${index}-${partIndex}`}
+                                      className="lyric-line secondary"
+                                    >
+                                      {part}
+                                    </div>
+                                  ))
+                                : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

@@ -111,25 +111,25 @@ export function BottomPlayer({
         </div>
       ) : null}
 
-      <div className="bottom-player-surface">
-        <div
-          className="bottom-player-progress-shell"
-          onPointerEnter={updateProgressPreview}
-          onPointerMove={updateProgressPreview}
-          onPointerLeave={() => setProgressPreview(null)}
-        >
-          <input
-            type="range"
-            className="bottom-player-progress"
-            min={0}
-            max={totalDuration}
-            value={Math.min(currentTimeMs, totalDuration)}
-            onChange={(event) => onSeek(Number.parseInt(event.target.value, 10))}
-            disabled={!track}
-            aria-label="Seek"
-          />
-        </div>
+      <div
+        className="bottom-player-progress-shell"
+        onPointerEnter={updateProgressPreview}
+        onPointerMove={updateProgressPreview}
+        onPointerLeave={() => setProgressPreview(null)}
+      >
+        <input
+          type="range"
+          className="bottom-player-progress"
+          min={0}
+          max={totalDuration}
+          value={Math.min(currentTimeMs, totalDuration)}
+          onChange={(event) => onSeek(Number.parseInt(event.target.value, 10))}
+          disabled={!track}
+          aria-label="Seek"
+        />
+      </div>
 
+      <div className="bottom-player-surface">
         <div className="bottom-player-layout">
           <div className="bottom-player-current">
             <button

@@ -141,10 +141,12 @@ vi.mock("./components/ExpandedPlayer", () => ({
 vi.mock("./components/BottomPlayer", () => ({
   BottomPlayer: ({
     track,
+    isPlaying,
     isExpanded,
     onTogglePanel
   }: {
     track: TrackDetail | null;
+    isPlaying: boolean;
     isExpanded: boolean;
     onTogglePanel: () => void;
   }) => (
@@ -153,6 +155,7 @@ vi.mock("./components/BottomPlayer", () => ({
         Toggle expanded player
       </button>
       <div data-testid="bottom-player-track">{track?.title ?? "none"}</div>
+      <div data-testid="bottom-player-playing">{String(isPlaying)}</div>
       <div data-testid="bottom-player-expanded">{String(isExpanded)}</div>
     </div>
   )
@@ -189,9 +192,9 @@ vi.mock("./components/SettingsView", () => ({
       <button type="button" onClick={() => onDefaultExpandedTabChange("details")}>Default Details</button>
       <button type="button" onClick={() => onTrackSortChange("title-desc")}>Sort Title Desc</button>
       <button type="button" onClick={() => onTrackSortChange("modified-asc")}>Sort Modified Asc</button>
-      <button type="button" onClick={() => onVisualEffectChange("mainBackground", false)}>Disable Main Glow</button>
-      <button type="button" onClick={() => onVisualEffectChange("bottomPlayer", false)}>Disable Footer Glow</button>
-      <button type="button" onClick={() => onVisualEffectChange("lyrics", false)}>Disable Lyrics Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("mainBackground", true)}>Enable Main Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("bottomPlayer", true)}>Enable Footer Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("lyrics", true)}>Enable Lyrics Glow</button>
     </div>
   )
 }));
@@ -523,20 +526,20 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() => {
-      expect(screen.getByTestId("settings-main-glow").textContent).toBe("true");
-      expect(screen.getByTestId("settings-footer-glow").textContent).toBe("true");
-      expect(screen.getByTestId("settings-lyrics-glow").textContent).toBe("true");
+      expect(screen.getByTestId("settings-main-glow").textContent).toBe("false");
+      expect(screen.getByTestId("settings-footer-glow").textContent).toBe("false");
+      expect(screen.getByTestId("settings-lyrics-glow").textContent).toBe("false");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Disable Footer Glow" }));
-    fireEvent.click(screen.getByRole("button", { name: "Disable Lyrics Glow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable Footer Glow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable Lyrics Glow" }));
 
     await waitFor(() => {
       expect(window.localStorage.getItem(VISUAL_EFFECTS_STORAGE_KEY)).toBe(
         JSON.stringify({
-          mainBackground: true,
-          bottomPlayer: false,
-          lyrics: false
+          mainBackground: false,
+          bottomPlayer: true,
+          lyrics: true
         })
       );
     });
@@ -562,5 +565,40 @@ describe("App", () => {
     expect(getTrackCalls.filter((trackId) => trackId === "track-2")).toHaveLength(1);
     expect(getLyricsCalls.filter((trackId) => trackId === "track-1")).toHaveLength(1);
     expect(getLyricsCalls.filter((trackId) => trackId === "track-2")).toHaveLength(1);
+  });
+
+  it("resyncs the play button state from the real audio element", async () => {
+    await renderAppWithMock();
+
+    const audio = document.querySelector("audio");
+    if (!(audio instanceof HTMLAudioElement)) {
+      throw new Error("Audio element not found");
+    }
+
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => false
+    });
+    Object.defineProperty(audio, "ended", {
+      configurable: true,
+      get: () => false
+    });
+
+    fireEvent(audio, new Event("timeupdate"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("bottom-player-playing").textContent).toBe("true");
+    });
+
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      get: () => true
+    });
+
+    fireEvent(audio, new Event("pause"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("bottom-player-playing").textContent).toBe("false");
+    });
   });
 });

@@ -7,9 +7,9 @@ export type VisualEffectsPreferences = {
 export type VisualEffectKey = keyof VisualEffectsPreferences;
 
 export const DEFAULT_VISUAL_EFFECTS: VisualEffectsPreferences = {
-  mainBackground: true,
-  bottomPlayer: true,
-  lyrics: true
+  mainBackground: false,
+  bottomPlayer: false,
+  lyrics: false
 };
 
 export const VISUAL_EFFECTS_STORAGE_KEY = "replica-player:visual-effects";

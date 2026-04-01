@@ -1,5 +1,6 @@
 import {
   startTransition,
+  type CSSProperties,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -72,6 +73,8 @@ type ManualScanModalState = {
 };
 
 const VOLUME_STORAGE_KEY = "replica-player:volume-percent";
+const EXPANDED_PLAYER_TRANSITION_MS = 280;
+type ExpandedPlayerPhase = "closed" | "entering" | "open" | "closing";
 
 function readStoredVolume(): number {
   try {
@@ -143,6 +146,10 @@ function playbackRejectionMessage(track: TrackDetail | null, error: unknown): st
   }
 
   return unavailableTrackMessage(track);
+}
+
+function isAudioActivelyPlaying(audio: HTMLAudioElement): boolean {
+  return !audio.paused && !audio.ended;
 }
 
 async function waitForAudioSourceReady(
@@ -279,6 +286,8 @@ export function App() {
     readStoredDefaultExpandedTab(window.localStorage)
   );
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
+  const [renderExpandedPlayer, setRenderExpandedPlayer] = useState(false);
+  const [expandedPlayerPhase, setExpandedPlayerPhase] = useState<ExpandedPlayerPhase>("closed");
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() =>
     readStoredPlaybackMode(window.localStorage)
   );
@@ -318,6 +327,15 @@ export function App() {
 
     const blob = await response.blob();
     return URL.createObjectURL(blob);
+  }
+
+  function syncPlaybackStateFromAudio(): void {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    setIsPlaying(isAudioActivelyPlaying(audio));
   }
 
   useEffect(() => {
@@ -473,6 +491,46 @@ export function App() {
       setIsPlayerExpanded(false);
     }
   }, [activeView]);
+
+  useEffect(() => {
+    let frameA = 0;
+    let frameB = 0;
+    let timeoutId = 0;
+
+    if (isPlayerExpanded) {
+      setRenderExpandedPlayer(true);
+      setExpandedPlayerPhase("entering");
+      frameA = window.requestAnimationFrame(() => {
+        frameB = window.requestAnimationFrame(() => {
+          setExpandedPlayerPhase("open");
+        });
+      });
+    } else if (renderExpandedPlayer) {
+      setExpandedPlayerPhase("closing");
+      timeoutId = window.setTimeout(() => {
+        setRenderExpandedPlayer(false);
+        setExpandedPlayerPhase("closed");
+      }, EXPANDED_PLAYER_TRANSITION_MS);
+    } else {
+      setExpandedPlayerPhase("closed");
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frameA);
+      window.cancelAnimationFrame(frameB);
+      window.clearTimeout(timeoutId);
+    };
+  }, [isPlayerExpanded, renderExpandedPlayer]);
+
+  useEffect(() => {
+    if (isPlayerExpanded) {
+      return;
+    }
+
+    if (!renderExpandedPlayer && expandedPlayerPhase !== "closed") {
+      setExpandedPlayerPhase("closed");
+    }
+  }, [expandedPlayerPhase, isPlayerExpanded, renderExpandedPlayer]);
 
   useEffect(() => {
     if (!selectedTrackId) {
@@ -659,6 +717,7 @@ export function App() {
         sourceLoadStateRef.current = "ready";
         if (playbackIntentRef.current) {
           await audio.play();
+          syncPlaybackStateFromAudio();
         }
         return;
       } catch (directError) {
@@ -687,6 +746,7 @@ export function App() {
           sourceLoadStateRef.current = "ready";
           if (playbackIntentRef.current) {
             await audio.play();
+            syncPlaybackStateFromAudio();
           }
         } catch (error) {
           if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
@@ -1014,12 +1074,17 @@ export function App() {
   }
 
   const handleAudioPlay = useEffectEvent(() => {
-    setIsPlaying(true);
+    syncPlaybackStateFromAudio();
     setPlaybackError(null);
   });
 
   const handleAudioPause = useEffectEvent(() => {
-    setIsPlaying(false);
+    syncPlaybackStateFromAudio();
+  });
+
+  const handleAudioPlaying = useEffectEvent(() => {
+    syncPlaybackStateFromAudio();
+    setPlaybackError(null);
   });
 
   const handleAudioLoadedMetadata = useEffectEvent(() => {
@@ -1031,6 +1096,7 @@ export function App() {
     setPlaybackError(null);
     setDurationMs(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
     setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
+    syncPlaybackStateFromAudio();
   });
 
   const handleAudioTimeUpdate = useEffectEvent(() => {
@@ -1040,6 +1106,7 @@ export function App() {
     }
 
     setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
+    syncPlaybackStateFromAudio();
   });
 
   const handleAudioEnded = useEffectEvent(() => {
@@ -1100,6 +1167,7 @@ export function App() {
     }
 
     audio.addEventListener("play", handleAudioPlay);
+    audio.addEventListener("playing", handleAudioPlaying);
     audio.addEventListener("pause", handleAudioPause);
     audio.addEventListener("loadedmetadata", handleAudioLoadedMetadata);
     audio.addEventListener("timeupdate", handleAudioTimeUpdate);
@@ -1109,6 +1177,7 @@ export function App() {
 
     return () => {
       audio.removeEventListener("play", handleAudioPlay);
+      audio.removeEventListener("playing", handleAudioPlaying);
       audio.removeEventListener("pause", handleAudioPause);
       audio.removeEventListener("loadedmetadata", handleAudioLoadedMetadata);
       audio.removeEventListener("timeupdate", handleAudioTimeUpdate);
@@ -1122,6 +1191,7 @@ export function App() {
     handleAudioLoadedMetadata,
     handleAudioPause,
     handleAudioPlay,
+    handleAudioPlaying,
     handleAudioTimeUpdate
   ]);
 
@@ -1324,10 +1394,14 @@ export function App() {
       if (activePanelTabRef.current !== "lyrics") {
         setActivePanelTab("queue");
       }
-      void audio.play().catch((error) => {
-        playbackIntentRef.current = false;
-        setPlaybackError(playbackRejectionMessage(trackDetail, error));
-      });
+      void audio.play()
+        .then(() => {
+          syncPlaybackStateFromAudio();
+        })
+        .catch((error) => {
+          playbackIntentRef.current = false;
+          setPlaybackError(playbackRejectionMessage(trackDetail, error));
+        });
       return;
     }
 
@@ -1451,10 +1525,14 @@ export function App() {
       return;
     }
 
-    void audio.play().catch((error) => {
-      playbackIntentRef.current = false;
-      setPlaybackError(playbackRejectionMessage(trackDetail, error));
-    });
+    void audio.play()
+      .then(() => {
+        syncPlaybackStateFromAudio();
+      })
+      .catch((error) => {
+        playbackIntentRef.current = false;
+        setPlaybackError(playbackRejectionMessage(trackDetail, error));
+      });
   }, [selectedTrackId, trackDetail]);
 
   const handleDefaultExpandedTabChange = useCallback((tab: ActivePanelTab): void => {
@@ -1525,83 +1603,98 @@ export function App() {
                 libraryViewRef.current = null;
               }
             }}
-            className={isPlayerExpanded ? "expanded-player-view" : isSettingsView ? "settings-main" : "library-view"}
+            className={`main-view-shell ${isSettingsView ? "settings-main-shell" : "library-main-shell"} ${isPlayerExpanded ? "panel-open" : ""}`}
           >
-            {libraryError ? <div className="error-banner">{libraryError}</div> : null}
-            {playbackError ? <div className="error-banner">{playbackError}</div> : null}
-            {!isPlayerExpanded && !isSettingsView && selectedMissingTrack ? (
-              <div className="action-banner">
-                <div>
-                  <strong>{selectedMissingTrack.title} is missing from disk.</strong>
-                  <span>Remove it from the library if you no longer want to track it.</span>
-                </div>
-                <button
-                  type="button"
-                  className="cta-button secondary"
-                  onClick={() => void handleRemoveTrack(selectedMissingTrack.id)}
-                >
-                  Remove Track
-                </button>
+            {!isPlayerExpanded ? (
+              <div className={`main-view-stage ${renderExpandedPlayer ? "revealed-under-overlay" : ""}`}>
+                {libraryError ? <div className="error-banner">{libraryError}</div> : null}
+                {playbackError ? <div className="error-banner">{playbackError}</div> : null}
+                {!isSettingsView && selectedMissingTrack ? (
+                  <div className="action-banner">
+                    <div>
+                      <strong>{selectedMissingTrack.title} is missing from disk.</strong>
+                      <span>Remove it from the library if you no longer want to track it.</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="cta-button secondary"
+                      onClick={() => void handleRemoveTrack(selectedMissingTrack.id)}
+                    >
+                      Remove Track
+                    </button>
+                  </div>
+                ) : null}
+
+                {isSettingsView ? (
+                  <SettingsView
+                    roots={roots}
+                    scanProgress={scanProgress}
+                    defaultExpandedTab={defaultExpandedTab}
+                    trackSort={trackSort}
+                    visualEffects={visualEffects}
+                    onAddRoots={() => void handleAddRoots()}
+                    onRescan={() => void handleRescan()}
+                    onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
+                    onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
+                    onTrackSortChange={handleTrackSortChange}
+                    onVisualEffectChange={handleVisualEffectChange}
+                    onOpenExternal={(url) => void window.system.openExternal(url)}
+                  />
+                ) : (
+                  <>
+                    <LibraryHero
+                      currentRootLabel={currentRootLabel}
+                      isLoading={isLoadingLibrary}
+                      visibleTrackCount={visibleTracks.length}
+                      filterCounts={availabilityCounts}
+                      activeFilter={availabilityFilter}
+                      libraryMessage={libraryMessage}
+                      onFilterChange={handleAvailabilityFilterChange}
+                    />
+
+                    <TrackTable
+                      tracks={visibleTracks}
+                      selectedTrackId={selectedTrackId}
+                      hasRoots={roots.length > 0}
+                      isLoading={isLoadingLibrary}
+                      showLoadingOverlay={isLoadingLibrary}
+                      activeFilter={availabilityFilter}
+                      scrollContainerRef={libraryViewRef}
+                      onOpenSettings={handleOpenSettings}
+                      onSelectTrack={setSelectedTrackId}
+                      onPlayTrack={handlePlayTrack}
+                    />
+                  </>
+                )}
               </div>
             ) : null}
 
-            {isPlayerExpanded ? (
-              <ExpandedPlayer
-                activeTab={activePanelTab}
-                selectedTrackId={selectedTrackId}
-                queueTracks={visibleTracks}
-                queueStartIndex={selectedTrackIndex}
-                trackDetail={trackDetail}
-                lyrics={lyrics}
-                activeLyricLine={activeLyricLine}
-                streamerVars={streamerVars}
-                isPlaying={isPlaying}
-                onSelectTrack={setSelectedTrackId}
-                onTabChange={handlePanelTabChange}
-                setLyricRef={handleSetLyricRef}
-                setLyricsScrollRef={handleSetLyricsScrollRef}
-              />
-            ) : isSettingsView ? (
-              <SettingsView
-                roots={roots}
-                scanProgress={scanProgress}
-                defaultExpandedTab={defaultExpandedTab}
-                trackSort={trackSort}
-                visualEffects={visualEffects}
-                onAddRoots={() => void handleAddRoots()}
-                onRescan={() => void handleRescan()}
-                onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
-                onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
-                onTrackSortChange={handleTrackSortChange}
-                onVisualEffectChange={handleVisualEffectChange}
-                onOpenExternal={(url) => void window.system.openExternal(url)}
-              />
-            ) : (
-              <>
-                <LibraryHero
-                  currentRootLabel={currentRootLabel}
-                  isLoading={isLoadingLibrary}
-                  visibleTrackCount={visibleTracks.length}
-                  filterCounts={availabilityCounts}
-                  activeFilter={availabilityFilter}
-                  libraryMessage={libraryMessage}
-                  onFilterChange={handleAvailabilityFilterChange}
-                />
-
-                <TrackTable
-                  tracks={visibleTracks}
-                  selectedTrackId={selectedTrackId}
-                  hasRoots={roots.length > 0}
-                  isLoading={isLoadingLibrary}
-                  showLoadingOverlay={isLoadingLibrary}
-                  activeFilter={availabilityFilter}
-                  scrollContainerRef={libraryViewRef}
-                  onOpenSettings={handleOpenSettings}
-                  onSelectTrack={setSelectedTrackId}
-                  onPlayTrack={handlePlayTrack}
-                />
-              </>
-            )}
+            {renderExpandedPlayer ? (
+              <div
+                className={`expanded-player-overlay ${expandedPlayerPhase}`}
+                style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_TRANSITION_MS}ms` } as CSSProperties}
+              >
+                {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
+                {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
+                <div className="expanded-player-view">
+                  <ExpandedPlayer
+                    activeTab={activePanelTab}
+                    selectedTrackId={selectedTrackId}
+                    queueTracks={visibleTracks}
+                    queueStartIndex={selectedTrackIndex}
+                    trackDetail={trackDetail}
+                    lyrics={lyrics}
+                    activeLyricLine={activeLyricLine}
+                    streamerVars={streamerVars}
+                    isPlaying={isPlaying}
+                    onSelectTrack={setSelectedTrackId}
+                    onTabChange={handlePanelTabChange}
+                    setLyricRef={handleSetLyricRef}
+                    setLyricsScrollRef={handleSetLyricsScrollRef}
+                  />
+                </div>
+              </div>
+            ) : null}
           </main>
         </div>
       </div>

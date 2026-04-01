@@ -55,6 +55,7 @@ export function SettingsView({
     { id: "bottomPlayer", label: "Bottom player ambient light", description: "Show the glass glow and ambient lighting behind the footer controls." },
     { id: "lyrics", label: "Lyrics module glow", description: "Show the animated streamer inside the lyrics panel." }
   ];
+  const visualEffectsWarning = "This feature might be performance heavy. Use with caution.";
 
   function handleExternalLinkClick(
     event: MouseEvent<HTMLAnchorElement>,
@@ -195,6 +196,7 @@ export function SettingsView({
                 <div className="settings-toggle-copy">
                   <strong>{option.label}</strong>
                   <span>{option.description}</span>
+                  <small>{visualEffectsWarning}</small>
                 </div>
                 <span className={`settings-toggle-pill ${enabled ? "active" : ""}`} aria-hidden="true">
                   <span className="settings-toggle-thumb" />
