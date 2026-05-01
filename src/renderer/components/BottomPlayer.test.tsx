@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { TrackDetail } from "../../shared/types";
@@ -38,6 +38,77 @@ describe("buildProgressTooltipLeft", () => {
 });
 
 describe("BottomPlayer", () => {
+  it("throttles pointer move updates via requestAnimationFrame", () => {
+    let lastRafCallback: FrameRequestCallback | null = null;
+    let rafId = 0;
+    const cancelledIds = new Set<number>();
+
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      lastRafCallback = cb;
+      rafId++;
+      return rafId;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      cancelledIds.add(id);
+    });
+
+    const { container } = render(
+      <BottomPlayer
+        track={TRACK}
+        isPlaying={false}
+        isExpanded={false}
+        isSettingsView={false}
+        canPlay
+        playbackMode="repeat-all"
+        currentTimeMs={0}
+        durationMs={TRACK.durationMs}
+        volumePercent={100}
+        canStepPrev
+        canStepNext
+        onStepPrev={vi.fn()}
+        onStepNext={vi.fn()}
+        onTogglePlay={vi.fn()}
+        onSeek={vi.fn()}
+        onVolumeChange={vi.fn()}
+        onCyclePlaybackMode={vi.fn()}
+        onTogglePanel={vi.fn()}
+      />
+    );
+
+    const shell = container.querySelector(".bottom-player-progress-shell");
+    if (!(shell instanceof HTMLDivElement)) {
+      throw new Error("Progress shell not found");
+    }
+
+    vi.spyOn(shell, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, width: 300, height: 20,
+      top: 0, right: 300, bottom: 20, left: 0,
+      toJSON: () => ({})
+    });
+
+    // Multiple rapid pointer moves — each cancels the previous rAF
+    fireEvent.pointerMove(shell, { clientX: 50 });
+    fireEvent.pointerMove(shell, { clientX: 100 });
+    fireEvent.pointerMove(shell, { clientX: 150 });
+
+    // Previous rAF IDs should have been cancelled (including initial ref value 0)
+    expect(cancelledIds.size).toBeGreaterThanOrEqual(2);
+
+    // No tooltip yet — rAF callback hasn't fired
+    expect(screen.queryByText("2:30")).toBeNull();
+
+    // Flush the last pending callback
+    expect(lastRafCallback).not.toBeNull();
+    act(() => {
+      lastRafCallback!(0);
+    });
+
+    // Tooltip should show the last position's time (150/300 * 300000 = 150000ms = 2:30)
+    expect(screen.getByText("2:30")).toBeTruthy();
+
+    vi.restoreAllMocks();
+  });
+
   it("renders a seek tooltip on hover using the clamped offset", () => {
     const { container } = render(
       <BottomPlayer
@@ -79,8 +150,15 @@ describe("BottomPlayer", () => {
       toJSON: () => ({})
     });
 
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
     fireEvent.pointerEnter(shell, { clientX: 0 });
 
     expect(screen.getByText("0:00")).toBeTruthy();
+
+    rafSpy.mockRestore();
   });
 });

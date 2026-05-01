@@ -4,16 +4,13 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
-  useEffectEvent,
   useRef,
   useState
 } from "react";
 
 import type {
   LibraryRoot,
-  LyricPayload,
   ScanProgress,
-  TrackDetail,
   TrackListItem,
   TrackSortOption
 } from "../shared/types";
@@ -28,12 +25,6 @@ import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
 import { currentLyricIndex, nextLyricDelayMs } from "./lyrics-timing";
 import { scrollLyricsContainer } from "./lyrics-scroll";
-import {
-  cyclePlaybackMode,
-  PLAYBACK_MODE_STORAGE_KEY,
-  readStoredPlaybackMode,
-  type PlaybackMode
-} from "./playback";
 import {
   DEFAULT_STREAMER_VARS,
   extractStreamerVars,
@@ -54,7 +45,8 @@ import {
   readStoredVisualEffects,
   VISUAL_EFFECTS_STORAGE_KEY
 } from "./visual-effects-preferences";
-import { calculatePulseLevel, smoothPulse } from "./visualizer";
+import { useAudioPlayback } from "./use-audio-playback";
+import { useVisualizer } from "./use-visualizer";
 
 type AvailabilityCounts = {
   all: number;
@@ -72,27 +64,8 @@ type ManualScanModalState = {
   files: string[];
 };
 
-const VOLUME_STORAGE_KEY = "replica-player:volume-percent";
 const EXPANDED_PLAYER_TRANSITION_MS = 280;
 type ExpandedPlayerPhase = "closed" | "entering" | "open" | "closing";
-
-function readStoredVolume(): number {
-  try {
-    const raw = window.localStorage.getItem(VOLUME_STORAGE_KEY);
-    if (!raw) {
-      return 100;
-    }
-
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isFinite(parsed)) {
-      return 100;
-    }
-
-    return Math.min(Math.max(parsed, 0), 100);
-  } catch {
-    return 100;
-  }
-}
 
 function toScanFileLabel(filePath: string): string {
   const segments = filePath.split(/[/\\]/);
@@ -101,109 +74,6 @@ function toScanFileLabel(filePath: string): string {
 
 function trackQueryCacheKey(rootId: string, search: string, sort: TrackSortOption): string {
   return `${rootId}::${search.trim().toLowerCase()}::${sort}`;
-}
-
-class ResourceRequestError extends Error {
-  constructor(readonly status: number) {
-    super(`Resource request failed with status ${status}`);
-  }
-}
-
-function playbackErrorMessage(format: string): string {
-  if (format === "Ogg") {
-    return "This Ogg file could not be decoded by Chromium. The container is supported, but this codec variant is not.";
-  }
-
-  return "This track could not be played.";
-}
-
-function unavailableTrackMessage(track: TrackDetail | null): string {
-  if (!track) {
-    return "This track could not be played.";
-  }
-
-  switch (track.availability) {
-    case "missing":
-      return "This file is missing from disk. Run Rescan to refresh the library.";
-    case "offline":
-      return "This track is in a saved folder that is currently unavailable.";
-    case "available":
-      return playbackErrorMessage(track.format);
-  }
-}
-
-function playbackRejectionMessage(track: TrackDetail | null, error: unknown): string {
-  if (error instanceof DOMException && error.name === "NotAllowedError") {
-    return "Playback is blocked until you press Play.";
-  }
-
-  if (error instanceof ResourceRequestError && error.status === 404) {
-    if (track?.availability === "offline") {
-      return unavailableTrackMessage(track);
-    }
-
-    return "This file is no longer available. Run Rescan to refresh the library.";
-  }
-
-  return unavailableTrackMessage(track);
-}
-
-function isAudioActivelyPlaying(audio: HTMLAudioElement): boolean {
-  return !audio.paused && !audio.ended;
-}
-
-async function waitForAudioSourceReady(
-  audio: HTMLAudioElement,
-  signal: AbortSignal
-): Promise<void> {
-  if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("Timed out while loading audio source"));
-    }, 4000);
-
-    const cleanup = () => {
-      window.clearTimeout(timeoutId);
-      signal.removeEventListener("abort", handleAbort);
-      audio.removeEventListener("loadedmetadata", handleReady);
-      audio.removeEventListener("canplay", handleReady);
-      audio.removeEventListener("error", handleError);
-    };
-
-    const handleReady = () => {
-      cleanup();
-      resolve();
-    };
-
-    const handleError = () => {
-      cleanup();
-      reject(new Error("Audio source failed to load"));
-    };
-
-    const handleAbort = () => {
-      cleanup();
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-
-    signal.addEventListener("abort", handleAbort, { once: true });
-    audio.addEventListener("loadedmetadata", handleReady);
-    audio.addEventListener("canplay", handleReady);
-    audio.addEventListener("error", handleError);
-  });
-}
-
-async function assignAudioSource(
-  audio: HTMLAudioElement,
-  sourceUrl: string,
-  signal: AbortSignal
-): Promise<void> {
-  audio.src = sourceUrl;
-  audio.load();
-  await waitForAudioSourceReady(audio, signal);
 }
 
 function filterTracks(tracks: TrackListItem[], filter: AvailabilityFilter): TrackListItem[] {
@@ -235,34 +105,18 @@ function countAvailabilities(tracks: TrackListItem[]): AvailabilityCounts {
 export function App() {
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const libraryViewRef = useRef<HTMLElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const playbackIntentRef = useRef(false);
-  const trackObjectUrlRef = useRef<string | null>(null);
-  const sourceLoadStateRef = useRef<"idle" | "loading" | "ready">("idle");
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new LruCache<string, TrackListItem[]>(32));
-  const trackDetailCacheRef = useRef(new LruCache<string, TrackDetail | null>(256));
-  const lyricsCacheRef = useRef(new LruCache<string, LyricPayload>(256));
   const streamerCacheRef = useRef(new LruCache<string, StreamerVars>(128));
   const scanModalSeenFilesRef = useRef(new Map<string, Set<string>>());
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const analyserDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
-  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const pulseFrameRef = useRef<number | null>(null);
-  const mainPulseRef = useRef(0);
-  const footerPulseRef = useRef(0);
 
   const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<TrackListItem[]>([]);
   const [selectedRootId, setSelectedRootId] = useState<string>("");
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
-  const [trackDetail, setTrackDetail] = useState<TrackDetail | null>(null);
-  const [lyrics, setLyrics] = useState<LyricPayload>({ mode: "none", source: "none" });
   const [search, setSearch] = useState("");
   const [trackSort, setTrackSort] = useState<TrackSortOption>(() =>
     readStoredTrackSort(window.localStorage)
@@ -274,11 +128,6 @@ export function App() {
   const [hasLoadedRoots, setHasLoadedRoots] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
-  const [durationMs, setDurationMs] = useState(0);
-  const [activeLyricLine, setActiveLyricLine] = useState(-1);
   const [defaultExpandedTab, setDefaultExpandedTab] = useState<ActivePanelTab>(() =>
     readStoredDefaultExpandedTab(window.localStorage)
   );
@@ -288,10 +137,6 @@ export function App() {
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [renderExpandedPlayer, setRenderExpandedPlayer] = useState(false);
   const [expandedPlayerPhase, setExpandedPlayerPhase] = useState<ExpandedPlayerPhase>("closed");
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() =>
-    readStoredPlaybackMode(window.localStorage)
-  );
-  const [volumePercent, setVolumePercent] = useState<number>(() => readStoredVolume());
   const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
   const [streamerVars, setStreamerVars] = useState<StreamerVars>(DEFAULT_STREAMER_VARS);
   const [visualEffects, setVisualEffects] = useState(() =>
@@ -302,42 +147,52 @@ export function App() {
 
   activePanelTabRef.current = activePanelTab;
 
-  function applyShellPulse(mainPulse: number, footerPulse: number): void {
-    const appShell = appShellRef.current;
-    if (!appShell) {
-      return;
+  const availabilityCounts = countAvailabilities(libraryTracks);
+  const visibleTracks = filterTracks(libraryTracks, availabilityFilter);
+
+  function chooseRandomTrack(excludeTrackId: string | null): TrackListItem | null {
+    if (visibleTracks.length === 0) {
+      return null;
     }
 
-    appShell.style.setProperty("--streamer-main-pulse", mainPulse.toFixed(3));
-    appShell.style.setProperty("--streamer-footer-pulse", footerPulse.toFixed(3));
-  }
-
-  function clearTrackObjectUrl(): void {
-    if (trackObjectUrlRef.current) {
-      URL.revokeObjectURL(trackObjectUrlRef.current);
-      trackObjectUrlRef.current = null;
-    }
-  }
-
-  async function loadObjectUrl(resourceUrl: string, signal: AbortSignal): Promise<string> {
-    const response = await fetch(resourceUrl, { signal });
-    if (!response.ok) {
-      throw new ResourceRequestError(response.status);
+    if (visibleTracks.length === 1) {
+      return visibleTracks[0];
     }
 
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
-  }
-
-  function syncPlaybackStateFromAudio(): void {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
+    const candidates = visibleTracks.filter((track) => track.id !== excludeTrackId);
+    if (candidates.length === 0) {
+      return visibleTracks[0];
     }
 
-    setIsPlaying(isAudioActivelyPlaying(audio));
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex] ?? candidates[0];
   }
 
+  const {
+    audioRef,
+    selectedTrackId,
+    trackDetail,
+    lyrics,
+    isPlaying,
+    playbackPositionMs,
+    durationMs,
+    playbackError,
+    activeLyricLine,
+    playbackMode,
+    volumePercent,
+    setSelectedTrackId,
+    handleTogglePlay: baseHandleTogglePlay,
+    handleSeek,
+    handleCyclePlaybackMode,
+    handleVolumeChange,
+    stepTrack,
+    setActiveLyricLine,
+    setPlaybackError
+  } = useAudioPlayback(visibleTracks, chooseRandomTrack);
+
+  useVisualizer(audioRef, appShellRef, true);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -366,6 +221,7 @@ export function App() {
     };
   }, [isPlayerExpanded]);
 
+  // Load library roots
   useEffect(() => {
     let ignore = false;
 
@@ -396,6 +252,7 @@ export function App() {
     };
   }, [reloadTick]);
 
+  // Load library tracks
   useEffect(() => {
     let ignore = false;
 
@@ -465,14 +322,11 @@ export function App() {
     };
   }, [deferredSearch, reloadTick, roots.length, selectedRootId, trackSort]);
 
+  // Clear query cache on library change
   useEffect(() => {
     trackQueryCacheRef.current.clear();
-    trackDetailCacheRef.current.clear();
-    lyricsCacheRef.current.clear();
   }, [reloadTick]);
 
-  const availabilityCounts = countAvailabilities(libraryTracks);
-  const visibleTracks = filterTracks(libraryTracks, availabilityFilter);
   const selectedTrackIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
   const currentRoot = roots.find((root) => root.id === selectedRootId) ?? null;
   const currentRootLabel = currentRoot?.displayName ?? "All folders";
@@ -480,18 +334,21 @@ export function App() {
     ? roots.reduce((total, root) => total + root.trackCount, 0)
     : null;
 
+  // Auto-select first track
   useEffect(() => {
     if (!selectedTrackId && visibleTracks.length > 0) {
       setSelectedTrackId(visibleTracks[0].id);
     }
-  }, [selectedTrackId, visibleTracks]);
+  }, [selectedTrackId, setSelectedTrackId, visibleTracks]);
 
+  // Close expanded player when switching to settings
   useEffect(() => {
     if (activeView === "settings") {
       setIsPlayerExpanded(false);
     }
   }, [activeView]);
 
+  // Expanded player enter/exit animation
   useEffect(() => {
     let frameA = 0;
     let frameB = 0;
@@ -532,87 +389,7 @@ export function App() {
     }
   }, [expandedPlayerPhase, isPlayerExpanded, renderExpandedPlayer]);
 
-  useEffect(() => {
-    if (!selectedTrackId) {
-      const audio = audioRef.current;
-      playbackIntentRef.current = false;
-      clearTrackObjectUrl();
-      if (audio) {
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-      }
-      setTrackDetail(null);
-      setLyrics({ mode: "none", source: "none" });
-      setPlaybackPositionMs(0);
-      setDurationMs(0);
-      setIsPlaying(false);
-      setPlaybackError(null);
-      setActiveLyricLine(-1);
-      sourceLoadStateRef.current = "idle";
-      return;
-    }
-
-    const trackId = selectedTrackId;
-    let ignore = false;
-
-    async function loadTrack(): Promise<void> {
-      try {
-        const hasCachedTrackDetail = trackDetailCacheRef.current.has(trackId);
-        const hasCachedLyrics = lyricsCacheRef.current.has(trackId);
-        if (hasCachedTrackDetail && hasCachedLyrics) {
-          const cachedTrackDetail = trackDetailCacheRef.current.get(trackId) ?? null;
-          const cachedLyrics = lyricsCacheRef.current.get(trackId) ?? { mode: "none", source: "none" };
-
-          if (!cachedTrackDetail) {
-            setSelectedTrackId((current) => (current === trackId ? null : current));
-            return;
-          }
-
-          startTransition(() => {
-            setTrackDetail(cachedTrackDetail);
-            setLyrics(cachedLyrics);
-          });
-          return;
-        }
-
-        const [nextTrackDetail, nextLyrics] = await Promise.all([
-          window.library.getTrack(trackId),
-          window.library.getLyrics(trackId)
-        ]);
-
-        if (ignore) {
-          return;
-        }
-
-        if (!nextTrackDetail) {
-          trackDetailCacheRef.current.set(trackId, null);
-          lyricsCacheRef.current.set(trackId, { mode: "none", source: "none" });
-          setSelectedTrackId((current) => (current === trackId ? null : current));
-          return;
-        }
-
-        trackDetailCacheRef.current.set(trackId, nextTrackDetail);
-        lyricsCacheRef.current.set(trackId, nextLyrics);
-
-        startTransition(() => {
-          setTrackDetail(nextTrackDetail);
-          setLyrics(nextLyrics);
-        });
-      } catch (error) {
-        if (!ignore) {
-          setLibraryError(error instanceof Error ? error.message : "Unable to load track details");
-        }
-      }
-    }
-
-    void loadTrack();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedTrackId]);
-
+  // Scan progress listener
   useEffect(() => {
     const unsubscribe = window.library.onScanProgress((progress) => {
       const isActiveScan =
@@ -691,138 +468,12 @@ export function App() {
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    if (!selectedTrackId || !audioRef.current) {
-      return;
-    }
-
-    const trackId = selectedTrackId;
-    const audio = audioRef.current;
-    const controller = new AbortController();
-    let ignore = false;
-
-    setPlaybackError(null);
-    setPlaybackPositionMs(0);
-
-    async function loadTrackSource(): Promise<void> {
-      const mediaUrl = `replica-media://track/${encodeURIComponent(trackId)}`;
-      sourceLoadStateRef.current = "loading";
-
-      try {
-        clearTrackObjectUrl();
-        await assignAudioSource(audio, mediaUrl, controller.signal);
-        if (ignore) {
-          return;
-        }
-        sourceLoadStateRef.current = "ready";
-        if (playbackIntentRef.current) {
-          await audio.play();
-          syncPlaybackStateFromAudio();
-        }
-        return;
-      } catch (directError) {
-        if (ignore || (directError instanceof DOMException && directError.name === "AbortError")) {
-          return;
-        }
-
-        try {
-          audio.pause();
-          audio.removeAttribute("src");
-          audio.load();
-
-          const objectUrl = await loadObjectUrl(mediaUrl, controller.signal);
-          if (ignore) {
-            URL.revokeObjectURL(objectUrl);
-            return;
-          }
-
-          clearTrackObjectUrl();
-          trackObjectUrlRef.current = objectUrl;
-          await assignAudioSource(audio, objectUrl, controller.signal);
-          if (ignore) {
-            return;
-          }
-
-          sourceLoadStateRef.current = "ready";
-          if (playbackIntentRef.current) {
-            await audio.play();
-            syncPlaybackStateFromAudio();
-          }
-        } catch (error) {
-          if (!ignore && !(error instanceof DOMException && error.name === "AbortError")) {
-            sourceLoadStateRef.current = "idle";
-            playbackIntentRef.current = false;
-            setIsPlaying(false);
-            if (error instanceof ResourceRequestError && error.status === 404) {
-              setReloadTick((value) => value + 1);
-            }
-            setPlaybackError(playbackRejectionMessage(trackDetail, error));
-          }
-        }
-      }
-    }
-
-    void loadTrackSource();
-
-    return () => {
-      ignore = true;
-      controller.abort();
-      sourceLoadStateRef.current = "idle";
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-      clearTrackObjectUrl();
-    };
-  }, [selectedTrackId]);
-
-  useEffect(() => {
-    if (!trackDetail || trackDetail.availability === "available") {
-      return;
-    }
-
-    const audio = audioRef.current;
-    playbackIntentRef.current = false;
-    clearTrackObjectUrl();
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
-    setIsPlaying(false);
-    setPlaybackError(unavailableTrackMessage(trackDetail));
-  }, [trackDetail]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    audio.volume = volumePercent / 100;
-    audio.muted = volumePercent === 0;
-  }, [volumePercent]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(VOLUME_STORAGE_KEY, String(volumePercent));
-    } catch {
-      // Ignore storage failures; runtime volume still works.
-    }
-  }, [volumePercent]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(PLAYBACK_MODE_STORAGE_KEY, playbackMode);
-    } catch {
-      // Ignore storage failures; runtime playback mode still works.
-    }
-  }, [playbackMode]);
-
+  // Persist preferences
   useEffect(() => {
     try {
       window.localStorage.setItem(DEFAULT_EXPANDED_TAB_STORAGE_KEY, defaultExpandedTab);
     } catch {
-      // Ignore storage failures; runtime preference still works.
+      // Ignore storage failures
     }
   }, [defaultExpandedTab]);
 
@@ -830,7 +481,7 @@ export function App() {
     try {
       window.localStorage.setItem(TRACK_SORT_STORAGE_KEY, trackSort);
     } catch {
-      // Ignore storage failures; runtime preference still works.
+      // Ignore storage failures
     }
   }, [trackSort]);
 
@@ -838,10 +489,11 @@ export function App() {
     try {
       window.localStorage.setItem(VISUAL_EFFECTS_STORAGE_KEY, JSON.stringify(visualEffects));
     } catch {
-      // Ignore storage failures; runtime preference still works.
+      // Ignore storage failures
     }
   }, [visualEffects]);
 
+  // Extract streamer vars from artwork
   useEffect(() => {
     const artworkUrl = trackDetail?.artworkUrl;
     if (!artworkUrl) {
@@ -879,6 +531,7 @@ export function App() {
     };
   }, [trackDetail?.artworkUrl]);
 
+  // Apply streamer CSS variables
   useEffect(() => {
     const appShell = appShellRef.current;
     if (!appShell) {
@@ -895,155 +548,7 @@ export function App() {
     appShell.style.setProperty("--lyrics-glow-enabled", visualEffects.lyrics ? "1" : "0");
   }, [isPlaying, streamerVars, visualEffects]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    const AudioContextCtor =
-      window.AudioContext ??
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-
-    if (!audio || !AudioContextCtor) {
-      applyShellPulse(0, 0);
-      return;
-    }
-
-    const ensureAnalyser = (): boolean => {
-      if (analyserRef.current && audioContextRef.current) {
-        return true;
-      }
-
-      try {
-        const context = new AudioContextCtor();
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.82;
-
-        const source = context.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(context.destination);
-
-        audioContextRef.current = context;
-        analyserRef.current = analyser;
-        analyserDataRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
-        mediaSourceRef.current = source;
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const stopLoop = () => {
-      if (pulseFrameRef.current != null) {
-        window.cancelAnimationFrame(pulseFrameRef.current);
-        pulseFrameRef.current = null;
-      }
-    };
-
-    const tick = () => {
-      pulseFrameRef.current = null;
-
-      const analyser = analyserRef.current;
-      const data = analyserDataRef.current;
-      const context = audioContextRef.current;
-      const isActive =
-        !audio.paused &&
-        !audio.ended &&
-        analyser != null &&
-        data != null &&
-        context?.state === "running";
-
-      let targetPulse = 0;
-
-      if (isActive && analyser && data) {
-        analyser.getByteFrequencyData(data);
-        targetPulse = calculatePulseLevel(data);
-      }
-
-      mainPulseRef.current = smoothPulse(mainPulseRef.current, targetPulse, isActive);
-      footerPulseRef.current = smoothPulse(
-        footerPulseRef.current,
-        Math.min(targetPulse * 1.18, 1),
-        isActive
-      );
-
-      applyShellPulse(mainPulseRef.current, footerPulseRef.current);
-
-      if (isActive || mainPulseRef.current > 0 || footerPulseRef.current > 0) {
-        pulseFrameRef.current = window.requestAnimationFrame(tick);
-      }
-    };
-
-    const startLoop = async () => {
-      if (!ensureAnalyser()) {
-        return;
-      }
-
-      if (audioContextRef.current?.state === "suspended") {
-        try {
-          await audioContextRef.current.resume();
-        } catch {
-          // Ignore resume failures and leave pulse idle.
-        }
-      }
-
-      if (pulseFrameRef.current == null) {
-        pulseFrameRef.current = window.requestAnimationFrame(tick);
-      }
-    };
-
-    const decayLoop = () => {
-      if (pulseFrameRef.current == null) {
-        pulseFrameRef.current = window.requestAnimationFrame(tick);
-      }
-    };
-
-    const handlePlay = () => {
-      void startLoop();
-    };
-
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("playing", handlePlay);
-    audio.addEventListener("pause", decayLoop);
-    audio.addEventListener("ended", decayLoop);
-
-    if (!audio.paused) {
-      void startLoop();
-    } else {
-      applyShellPulse(0, 0);
-    }
-
-    return () => {
-      stopLoop();
-      applyShellPulse(0, 0);
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("playing", handlePlay);
-      audio.removeEventListener("pause", decayLoop);
-      audio.removeEventListener("ended", decayLoop);
-      audioContextRef.current?.close().catch(() => {});
-      mediaSourceRef.current?.disconnect();
-      analyserRef.current?.disconnect();
-      mediaSourceRef.current = null;
-      analyserRef.current = null;
-      analyserDataRef.current = null;
-      audioContextRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    const handleVolumeChange = () => {
-      setVolumePercent(Math.round((audio.muted ? 0 : audio.volume) * 100));
-    };
-
-    audio.addEventListener("volumechange", handleVolumeChange);
-    return () => {
-      audio.removeEventListener("volumechange", handleVolumeChange);
-    };
-  }, []);
-
+  // Reset availability filter when counts drop to zero
   useEffect(() => {
     if (availabilityFilter === "missing" && availabilityCounts.missing === 0) {
       setAvailabilityFilter("all");
@@ -1055,146 +560,7 @@ export function App() {
     }
   }, [availabilityCounts.missing, availabilityCounts.offline, availabilityFilter]);
 
-  function chooseRandomTrack(excludeTrackId: string | null): TrackListItem | null {
-    if (visibleTracks.length === 0) {
-      return null;
-    }
-
-    if (visibleTracks.length === 1) {
-      return visibleTracks[0];
-    }
-
-    const candidates = visibleTracks.filter((track) => track.id !== excludeTrackId);
-    if (candidates.length === 0) {
-      return visibleTracks[0];
-    }
-
-    const randomIndex = Math.floor(Math.random() * candidates.length);
-    return candidates[randomIndex] ?? candidates[0];
-  }
-
-  const handleAudioPlay = useEffectEvent(() => {
-    syncPlaybackStateFromAudio();
-    setPlaybackError(null);
-  });
-
-  const handleAudioPause = useEffectEvent(() => {
-    syncPlaybackStateFromAudio();
-  });
-
-  const handleAudioPlaying = useEffectEvent(() => {
-    syncPlaybackStateFromAudio();
-    setPlaybackError(null);
-  });
-
-  const handleAudioLoadedMetadata = useEffectEvent(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    setPlaybackError(null);
-    setDurationMs(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
-    setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
-    syncPlaybackStateFromAudio();
-  });
-
-  const handleAudioTimeUpdate = useEffectEvent(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    setPlaybackPositionMs(Math.round(audio.currentTime * 1000));
-    syncPlaybackStateFromAudio();
-  });
-
-  const handleAudioEnded = useEffectEvent(() => {
-    setIsPlaying(false);
-    const audio = audioRef.current;
-    if (playbackMode === "repeat-one" && selectedTrackId) {
-      playbackIntentRef.current = true;
-      if (audio) {
-        audio.currentTime = 0;
-        void audio.play().catch((error) => {
-          playbackIntentRef.current = false;
-          setPlaybackError(playbackRejectionMessage(trackDetail, error));
-        });
-      }
-      return;
-    }
-
-    if (playbackMode === "shuffle") {
-      const nextTrack = chooseRandomTrack(selectedTrackId);
-      if (nextTrack) {
-        playbackIntentRef.current = true;
-        setSelectedTrackId(nextTrack.id);
-        return;
-      }
-    }
-
-    const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
-    const nextTrack = visibleTracks[currentIndex + 1];
-    if (nextTrack) {
-      playbackIntentRef.current = true;
-      setSelectedTrackId(nextTrack.id);
-      return;
-    }
-
-    if (playbackMode === "repeat-all" && visibleTracks.length > 0) {
-      playbackIntentRef.current = true;
-      setSelectedTrackId(visibleTracks[0].id);
-      return;
-    }
-
-    playbackIntentRef.current = false;
-  });
-
-  const handleAudioError = useEffectEvent(() => {
-    if (sourceLoadStateRef.current === "loading") {
-      return;
-    }
-
-    playbackIntentRef.current = false;
-    setIsPlaying(false);
-    setPlaybackError(playbackErrorMessage(trackDetail?.format ?? ""));
-  });
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    audio.addEventListener("play", handleAudioPlay);
-    audio.addEventListener("playing", handleAudioPlaying);
-    audio.addEventListener("pause", handleAudioPause);
-    audio.addEventListener("loadedmetadata", handleAudioLoadedMetadata);
-    audio.addEventListener("timeupdate", handleAudioTimeUpdate);
-    audio.addEventListener("seeked", handleAudioTimeUpdate);
-    audio.addEventListener("ended", handleAudioEnded);
-    audio.addEventListener("error", handleAudioError);
-
-    return () => {
-      audio.removeEventListener("play", handleAudioPlay);
-      audio.removeEventListener("playing", handleAudioPlaying);
-      audio.removeEventListener("pause", handleAudioPause);
-      audio.removeEventListener("loadedmetadata", handleAudioLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleAudioTimeUpdate);
-      audio.removeEventListener("seeked", handleAudioTimeUpdate);
-      audio.removeEventListener("ended", handleAudioEnded);
-      audio.removeEventListener("error", handleAudioError);
-    };
-  }, [
-    handleAudioEnded,
-    handleAudioError,
-    handleAudioLoadedMetadata,
-    handleAudioPause,
-    handleAudioPlay,
-    handleAudioPlaying,
-    handleAudioTimeUpdate
-  ]);
-
+  // Synced lyrics timing
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || lyrics.mode !== "synced") {
@@ -1255,8 +621,9 @@ export function App() {
       audio.removeEventListener("pause", stop);
       audio.removeEventListener("ended", stop);
     };
-  }, [activePanelTab, isPlayerExpanded, lyrics, selectedTrackId]);
+  }, [activePanelTab, audioRef, isPlayerExpanded, lyrics, selectedTrackId, setActiveLyricLine]);
 
+  // Auto-scroll lyrics
   useEffect(() => {
     if (!isPlayerExpanded || activePanelTab !== "lyrics" || activeLyricLine < 0) {
       return;
@@ -1269,16 +636,12 @@ export function App() {
     }
   }, [activeLyricLine, activePanelTab, isPlayerExpanded]);
 
+  // Clear lyric refs on track change
   useEffect(() => {
     lyricRefs.current.clear();
   }, [selectedTrackId, lyrics.mode]);
 
-  useEffect(() => {
-    return () => {
-      clearTrackObjectUrl();
-    };
-  }, []);
-
+  // Library management handlers
   async function handleAddRoots(): Promise<void> {
     try {
       setLibraryError(null);
@@ -1370,88 +733,20 @@ export function App() {
     }
   }
 
+  // Wrapped toggle play to add panel tab behavior
   function handleTogglePlay(): void {
     const audio = audioRef.current;
     if (!audio) {
       return;
     }
 
-    if (!selectedTrackId && visibleTracks.length > 0) {
-      playbackIntentRef.current = true;
-      setSelectedTrackId(visibleTracks[0].id);
-      return;
-    }
-
-    if (trackDetail && trackDetail.availability !== "available") {
-      playbackIntentRef.current = false;
-      setPlaybackError(unavailableTrackMessage(trackDetail));
-      return;
-    }
-
     if (audio.paused) {
-      playbackIntentRef.current = true;
-      setPlaybackError(null);
       if (activePanelTabRef.current !== "lyrics") {
         setActivePanelTab("queue");
       }
-      void audio.play()
-        .then(() => {
-          syncPlaybackStateFromAudio();
-        })
-        .catch((error) => {
-          playbackIntentRef.current = false;
-          setPlaybackError(playbackRejectionMessage(trackDetail, error));
-        });
-      return;
     }
 
-    playbackIntentRef.current = false;
-    audio.pause();
-  }
-
-  function handleSeek(nextPositionMs: number): void {
-    const audio = audioRef.current;
-    const maxDuration = Math.max(durationMs, trackDetail?.durationMs ?? 0, 1);
-    const clampedPosition = Math.min(Math.max(nextPositionMs, 0), maxDuration);
-    setPlaybackPositionMs(clampedPosition);
-    if (audio) {
-      audio.currentTime = clampedPosition / 1000;
-    }
-  }
-
-  function stepTrack(direction: -1 | 1): void {
-    if (direction === -1 && playbackPositionMs >= 3000) {
-      handleSeek(0);
-      return;
-    }
-
-    if (visibleTracks.length === 0) {
-      return;
-    }
-
-    if (playbackMode === "shuffle") {
-      const randomTrack = chooseRandomTrack(selectedTrackId);
-      if (randomTrack) {
-        setSelectedTrackId(randomTrack.id);
-      }
-      return;
-    }
-
-    const currentIndex = visibleTracks.findIndex((track) => track.id === selectedTrackId);
-    let targetIndex = currentIndex >= 0 ? currentIndex + direction : 0;
-
-    if (playbackMode === "repeat-all" && visibleTracks.length > 0) {
-      if (targetIndex < 0) {
-        targetIndex = visibleTracks.length - 1;
-      } else if (targetIndex >= visibleTracks.length) {
-        targetIndex = 0;
-      }
-    }
-
-    const targetTrack = visibleTracks[targetIndex];
-    if (targetTrack) {
-      setSelectedTrackId(targetTrack.id);
-    }
+    baseHandleTogglePlay();
   }
 
   const handlePanelTabChange = useCallback((tab: ActivePanelTab): void => {
@@ -1488,15 +783,6 @@ export function App() {
     setIsPlayerExpanded(false);
   }, [defaultExpandedTab, isPlayerExpanded]);
 
-  const handleCyclePlaybackMode = useCallback((): void => {
-    setPlaybackMode((current) => cyclePlaybackMode(current));
-  }, []);
-
-  const handleVolumeChange = useCallback((nextVolumePercent: number): void => {
-    const clampedVolume = Math.min(Math.max(nextVolumePercent, 0), 100);
-    setVolumePercent(clampedVolume);
-  }, []);
-
   const handleSetLyricRef = useCallback((index: number, element: HTMLDivElement | null): void => {
     lyricRefs.current.set(index, element);
   }, []);
@@ -1506,34 +792,18 @@ export function App() {
   }, []);
 
   const handlePlayTrack = useCallback((trackId: string): void => {
-    playbackIntentRef.current = true;
-    setPlaybackError(null);
+    if (activePanelTabRef.current !== "lyrics") {
+      setActivePanelTab("queue");
+    }
 
     if (selectedTrackId !== trackId) {
       setSelectedTrackId(trackId);
       return;
     }
 
-    if (trackDetail && trackDetail.availability !== "available") {
-      playbackIntentRef.current = false;
-      setPlaybackError(unavailableTrackMessage(trackDetail));
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-
-    void audio.play()
-      .then(() => {
-        syncPlaybackStateFromAudio();
-      })
-      .catch((error) => {
-        playbackIntentRef.current = false;
-        setPlaybackError(playbackRejectionMessage(trackDetail, error));
-      });
-  }, [selectedTrackId, trackDetail]);
+    // Same track — just toggle play via the base handler
+    baseHandleTogglePlay();
+  }, [baseHandleTogglePlay, selectedTrackId, setSelectedTrackId]);
 
   const handleDefaultExpandedTabChange = useCallback((tab: ActivePanelTab): void => {
     setDefaultExpandedTab(tab);

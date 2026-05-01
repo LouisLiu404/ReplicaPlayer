@@ -1,5 +1,5 @@
 import type { CSSProperties, PointerEvent } from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { TrackDetail } from "../../shared/types";
 import type { PlaybackMode } from "../playback";
@@ -69,6 +69,7 @@ export function BottomPlayer({
     ? track.artist || track.album || "Unknown artist"
     : "Choose a track from the library.";
   const [progressPreview, setProgressPreview] = useState<{ timeMs: number; leftPercent: number } | null>(null);
+  const progressFrameRef = useRef(0);
   const modeLabel =
     playbackMode === "shuffle"
       ? "Shuffle"
@@ -78,21 +79,32 @@ export function BottomPlayer({
         ? "Repeat current track"
           : "Shuffle";
 
-  function updateProgressPreview(event: PointerEvent<HTMLDivElement>): void {
+  const updateProgressPreview = useCallback((event: PointerEvent<HTMLDivElement>): void => {
     if (!track) {
       setProgressPreview(null);
       return;
     }
 
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const relativeX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
-    const leftPercent = bounds.width > 0 ? relativeX / bounds.width : 0;
+    window.cancelAnimationFrame(progressFrameRef.current);
+    const currentTarget = event.currentTarget;
+    const clientX = event.clientX;
+    progressFrameRef.current = window.requestAnimationFrame(() => {
+      const bounds = currentTarget.getBoundingClientRect();
+      const relativeX = Math.min(Math.max(clientX - bounds.left, 0), bounds.width);
+      const leftPercent = bounds.width > 0 ? relativeX / bounds.width : 0;
 
-    setProgressPreview({
-      timeMs: Math.round(totalDuration * leftPercent),
-      leftPercent
+      setProgressPreview({
+        timeMs: Math.round(totalDuration * leftPercent),
+        leftPercent
+      });
     });
-  }
+  }, [track, totalDuration]);
+
+  useEffect(() => {
+    return () => {
+      window.cancelAnimationFrame(progressFrameRef.current);
+    };
+  }, []);
 
   return (
     <footer
@@ -115,7 +127,10 @@ export function BottomPlayer({
         className="bottom-player-progress-shell"
         onPointerEnter={updateProgressPreview}
         onPointerMove={updateProgressPreview}
-        onPointerLeave={() => setProgressPreview(null)}
+        onPointerLeave={() => {
+          window.cancelAnimationFrame(progressFrameRef.current);
+          setProgressPreview(null);
+        }}
       >
         <input
           type="range"

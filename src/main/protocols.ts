@@ -20,6 +20,8 @@ function response(status: number, body: string): Response {
   });
 }
 
+const MEDIA_CACHE_CONTROL = "private, max-age=86400";
+
 function contentTypeForPath(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
     case ".html":
@@ -132,7 +134,7 @@ async function streamLocalFile(filePath: string, rangeHeader: string | null = nu
     const headers = new Headers({
       "accept-ranges": "bytes",
       "access-control-allow-origin": "*",
-      "cache-control": "no-store",
+      "cache-control": MEDIA_CACHE_CONTROL,
       "content-length": String(byteRange.end - byteRange.start + 1),
       "content-type": contentTypeForPath(filePath)
     });

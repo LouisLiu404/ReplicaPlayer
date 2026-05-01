@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  memo,
   useEffect,
   useMemo,
   useRef,
@@ -50,7 +51,7 @@ const TABS: Array<{ id: ActivePanelTab; label: string }> = [
 const QUEUE_ROW_HEIGHT = 80;
 const QUEUE_OVERSCAN = 8;
 
-export function ExpandedPlayer({
+export const ExpandedPlayer = memo(function ExpandedPlayer({
   activeTab,
   selectedTrackId,
   queueTracks,
@@ -151,8 +152,12 @@ export function ExpandedPlayer({
         availabilityDescription(trackDetail.availability)
       ].filter((value): value is string => Boolean(value))
     : [];
-  const lyricsHaveTranslations = hasLyricTranslations(lyrics);
-  const lyricsSource = lyricSourceBadge(lyrics.source);
+  const lyricsHaveTranslations = useMemo(() => hasLyricTranslations(lyrics), [lyrics]);
+  const lyricsSource = useMemo(() => lyricSourceBadge(lyrics.source), [lyrics.source]);
+  const lyricDisplayParts = useMemo(
+    () => lyrics.mode === "synced" ? lyrics.lines.map((line) => splitLyricDisplayParts(line.text)) : [],
+    [lyrics]
+  );
 
   return (
     <section className="expanded-player">
@@ -337,24 +342,17 @@ export function ExpandedPlayer({
                         }}
                         className={`lyric-line-group ${activeLyricLine === index ? "active" : ""}`}
                       >
-                        {(() => {
-                          const parts = splitLyricDisplayParts(line.text);
-                          return (
-                            <>
-                              <div className="lyric-line primary">{parts.primary}</div>
-                              {showLyricTranslations
-                                ? parts.secondary.map((part, partIndex) => (
-                                    <div
-                                      key={`${line.startMs}-${index}-${partIndex}`}
-                                      className="lyric-line secondary"
-                                    >
-                                      {part}
-                                    </div>
-                                  ))
-                                : null}
-                            </>
-                          );
-                        })()}
+                        <div className="lyric-line primary">{lyricDisplayParts[index].primary}</div>
+                        {showLyricTranslations
+                          ? lyricDisplayParts[index].secondary.map((part, partIndex) => (
+                              <div
+                                key={`${line.startMs}-${index}-${partIndex}`}
+                                className="lyric-line secondary"
+                              >
+                                {part}
+                              </div>
+                            ))
+                          : null}
                       </div>
                     ))}
                   </div>
@@ -425,4 +423,4 @@ export function ExpandedPlayer({
       </div>
     </section>
   );
-}
+});
