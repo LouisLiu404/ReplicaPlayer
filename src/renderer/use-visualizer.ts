@@ -2,11 +2,6 @@ import { useEffect, useRef } from "react";
 
 import { calculatePulseLevel, smoothPulse } from "./visualizer";
 
-type PulseState = {
-  mainPulse: number;
-  footerPulse: number;
-};
-
 export function useVisualizer(
   audioRef: React.RefObject<HTMLAudioElement | null>,
   appShellRef: React.RefObject<HTMLDivElement | null>,

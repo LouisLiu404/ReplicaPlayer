@@ -480,8 +480,7 @@ export class LibraryRepository {
         genre_json = excluded.genre_json,
         artwork_hash = excluded.artwork_hash,
         lyric_mode = excluded.lyric_mode,
-        last_indexed_at = excluded.last_indexed_at,
-        availability = excluded.availability
+        last_indexed_at = excluded.last_indexed_at
     `);
 
     statement.run(
@@ -547,12 +546,13 @@ export class LibraryRepository {
 
     const normalizedSearch = filter.search?.trim().toLowerCase();
     if (normalizedSearch) {
-      const likeTerm = `%${normalizedSearch}%`;
+      const escapedSearch = normalizedSearch.replace(/[%_]/g, "\\$&");
+      const likeTerm = `%${escapedSearch}%`;
       conditions.push(`(
-        title LIKE ? COLLATE NOCASE
-        OR artist LIKE ? COLLATE NOCASE
-        OR album LIKE ? COLLATE NOCASE
-        OR file_name LIKE ? COLLATE NOCASE
+        title LIKE ? ESCAPE '\\'
+        OR artist LIKE ? ESCAPE '\\'
+        OR album LIKE ? ESCAPE '\\'
+        OR file_name LIKE ? ESCAPE '\\'
       )`);
       parameters.push(likeTerm, likeTerm, likeTerm, likeTerm);
     }

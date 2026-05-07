@@ -889,6 +889,18 @@ img {
   background: rgba(255, 107, 90, 0.12);
   border: 1px solid rgba(255, 107, 90, 0.32);
   color: #ffd6d1;
+  animation: error-banner-enter 200ms ease-out;
+}
+
+@keyframes error-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .track-table-shell {

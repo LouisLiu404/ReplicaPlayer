@@ -179,7 +179,8 @@ export type AudioPlaybackState = {
 
 export function useAudioPlayback(
   visibleTracks: TrackListItem[],
-  chooseRandomTrack: (excludeTrackId: string | null) => TrackListItem | null
+  chooseRandomTrack: (excludeTrackId: string | null) => TrackListItem | null,
+  onTrackNotFound?: () => void
 ): AudioPlaybackState {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playbackIntentRef = useRef(false);
@@ -214,7 +215,8 @@ export function useAudioPlayback(
       return;
     }
 
-    setIsPlaying(isAudioActivelyPlaying(audio));
+    const playing = isAudioActivelyPlaying(audio);
+    setIsPlaying((current) => (current === playing ? current : playing));
   }
 
   // Load track details and lyrics when selectedTrackId changes
@@ -359,8 +361,7 @@ export function useAudioPlayback(
             playbackIntentRef.current = false;
             setIsPlaying(false);
             if (error instanceof ResourceRequestError && error.status === 404) {
-              // Trigger a reload to detect missing tracks
-              setTrackDetail((current) => current);
+              onTrackNotFound?.();
             }
             setPlaybackError(playbackRejectionMessage(trackDetail, error));
           }

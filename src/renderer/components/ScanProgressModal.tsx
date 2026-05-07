@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 interface ScanProgressModalProps {
   scan: {
     status: "scanning" | "completed" | "error";
@@ -11,11 +13,28 @@ interface ScanProgressModalProps {
 }
 
 export function ScanProgressModal({ scan, onClose, toFileLabel }: ScanProgressModalProps) {
+  const isScanning = scan?.status === "scanning";
+
+  useEffect(() => {
+    if (!scan || isScanning) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isScanning, onClose, scan]);
+
   if (!scan) {
     return null;
   }
-
-  const isScanning = scan.status === "scanning";
   const title =
     scan.status === "completed"
       ? "Scan complete"

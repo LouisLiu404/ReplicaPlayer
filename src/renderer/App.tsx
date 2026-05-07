@@ -168,6 +168,10 @@ export function App() {
     return candidates[randomIndex] ?? candidates[0];
   }
 
+  const handleTrackNotFound = useCallback(() => {
+    setReloadTick((value) => value + 1);
+  }, []);
+
   const {
     audioRef,
     selectedTrackId,
@@ -188,7 +192,7 @@ export function App() {
     stepTrack,
     setActiveLyricLine,
     setPlaybackError
-  } = useAudioPlayback(visibleTracks, chooseRandomTrack);
+  } = useAudioPlayback(visibleTracks, chooseRandomTrack, handleTrackNotFound);
 
   useVisualizer(audioRef, appShellRef, true);
 
@@ -801,9 +805,26 @@ export function App() {
       return;
     }
 
-    // Same track — just toggle play via the base handler
-    baseHandleTogglePlay();
-  }, [baseHandleTogglePlay, selectedTrackId, setSelectedTrackId]);
+    // Same track — always restart from beginning
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    if (trackDetail && trackDetail.availability !== "available") {
+      setPlaybackError(
+        trackDetail.availability === "missing"
+          ? "This file is missing from disk. Run Rescan to refresh the library."
+          : "This track is in a saved folder that is currently unavailable."
+      );
+      return;
+    }
+
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      // Playback blocked by browser autoplay policy
+    });
+  }, [audioRef, selectedTrackId, setSelectedTrackId, setPlaybackError, trackDetail]);
 
   const handleDefaultExpandedTabChange = useCallback((tab: ActivePanelTab): void => {
     setDefaultExpandedTab(tab);
