@@ -37,6 +37,7 @@ describe("NavigationRail", () => {
     );
 
     expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /All folders/i }).title).toBe("All folders");
   });
 
   it("keeps folder scope buttons clickable from the settings view", () => {
@@ -58,5 +59,10 @@ describe("NavigationRail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /All folders/i }));
     expect(onSelectRoot).toHaveBeenCalledWith("");
+
+    expect(screen.getByRole("button", { name: /古风DJ/i }).title).toBe(
+      "古风DJ — /Users/liuyike/Music/古风DJ"
+    );
+    expect(screen.getByRole("button", { name: "Settings" }).title).toBe("Settings");
   });
 });

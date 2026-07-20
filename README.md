@@ -5,7 +5,7 @@ Replica Player is a macOS-only Electron music player for local files. It keeps a
 ## Current State
 
 - Desktop app shell built with Electron Forge, webpack, React, and TypeScript
-- Fixed-size movable macOS window: `1500 x 800`
+- Resizable movable macOS window: opens at its `1280 x 700` minimum
 - Persistent tracked folders managed from the in-app `Settings` view
 - Local library indexing with SQLite under Electron `userData`
 - Playback support for `mp3`, `flac`, `ogg`, and `oga`
@@ -199,7 +199,7 @@ The current test suite covers:
 ## Limitations
 
 - macOS only
-- fixed-size window
+- minimum supported window size is `1280 x 700`
 - manual rescan only, no background watching
 - local files only
 - no playlists

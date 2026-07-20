@@ -42,6 +42,7 @@ export const NavigationRail = memo(function NavigationRail({
           type="button"
           className={`rail-root-card ${selectedRootId === "" ? "selected" : ""}`}
           onClick={() => onSelectRoot("")}
+          title="All folders"
         >
           <div>
             <strong>All folders</strong>
@@ -59,7 +60,7 @@ export const NavigationRail = memo(function NavigationRail({
                 type="button"
                 className={`rail-root-card ${selectedRootId === root.id ? "selected" : ""}`}
                 onClick={() => onSelectRoot(root.id)}
-                title={root.path}
+                title={`${root.displayName} — ${root.path}`}
               >
                 <strong>{root.displayName}</strong>
                 <small>{`${root.trackCount} ${root.trackCount === 1 ? "track" : "tracks"}`}</small>
@@ -74,6 +75,8 @@ export const NavigationRail = memo(function NavigationRail({
           type="button"
           className={`rail-footer-button ${activeView === "settings" ? "active" : ""}`}
           onClick={onOpenSettings}
+          aria-label="Settings"
+          title="Settings"
         >
           <SettingsIcon className="rail-nav-icon" />
           <span>Settings</span>
