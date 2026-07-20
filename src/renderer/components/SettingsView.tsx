@@ -52,8 +52,7 @@ export function SettingsView({
   ];
   const visualEffectOptions: Array<{ id: VisualEffectKey; label: string; description: string }> = [
     { id: "mainBackground", label: "Main background glow", description: "Show the ambient glow behind the main library and expanded player surface." },
-    { id: "bottomPlayer", label: "Bottom player ambient light", description: "Show the glass glow and ambient lighting behind the footer controls." },
-    { id: "lyrics", label: "Lyrics module glow", description: "Show the animated streamer inside the lyrics panel." }
+    { id: "playerGlow", label: "Player glow", description: "Show album-colored light across the expanded player and its bottom controls. Hidden while collapsed." }
   ];
   const visualEffectsWarning = "This feature might be performance heavy. Use with caution.";
 
@@ -177,7 +176,7 @@ export function SettingsView({
       <section className="settings-section-card" aria-labelledby="visual-effects-settings">
         <div className="settings-section-copy">
           <h2 id="visual-effects-settings">Visual effects</h2>
-          <p>Turn ambient glow layers on or off independently without changing the rest of the layout.</p>
+          <p>Control the window atmosphere and the unified expanded-player lighting independently.</p>
         </div>
 
         <div className="settings-toggle-list">

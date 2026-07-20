@@ -67,13 +67,13 @@ describe("deriveStreamerVarsFromPixels", () => {
     const brightVars = deriveStreamerVarsFromPixels(brightPixels);
     const darkHighlight = parseRgba(darkVars["--streamer-color-b"]);
 
-    expect(parseFloat(darkVars["--streamer-footer-opacity"])).toBeGreaterThan(
-      parseFloat(brightVars["--streamer-footer-opacity"])
+    expect(parseFloat(darkVars["--streamer-player-opacity"])).toBeGreaterThan(
+      parseFloat(brightVars["--streamer-player-opacity"])
     );
     expect(relativeLuminance(darkHighlight.r, darkHighlight.g, darkHighlight.b)).toBeGreaterThan(0.18);
   });
 
-  it("exposes glass tint vars so panels can stay readable while showing the glow", () => {
+  it("exposes a readable surface highlight for artwork-backed player elements", () => {
     const pixels = createPixelBuffer([
       [18, 48, 64],
       [24, 94, 126],
@@ -82,13 +82,9 @@ describe("deriveStreamerVarsFromPixels", () => {
     ]);
 
     const vars = deriveStreamerVarsFromPixels(pixels);
-    const tint = parseRgba(vars["--streamer-surface-tint"]);
     const highlight = parseRgba(vars["--streamer-surface-highlight"]);
 
-    expect(tint.alpha).toBeGreaterThan(0.1);
     expect(highlight.alpha).toBeGreaterThan(0.08);
-    expect(relativeLuminance(highlight.r, highlight.g, highlight.b)).toBeGreaterThan(
-      relativeLuminance(tint.r, tint.g, tint.b)
-    );
+    expect(relativeLuminance(highlight.r, highlight.g, highlight.b)).toBeGreaterThan(0.18);
   });
 });

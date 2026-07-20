@@ -10,18 +10,34 @@ describe("readStoredVisualEffects", () => {
     expect(readStoredVisualEffects(null)).toEqual(DEFAULT_VISUAL_EFFECTS);
   });
 
-  it("reads stored toggles and falls back missing values", () => {
+  it("migrates the legacy lyrics glow to the unified player glow", () => {
     const storage = {
       getItem: () => JSON.stringify({
         mainBackground: true,
+        bottomPlayer: false,
         lyrics: true
       })
     };
 
     expect(readStoredVisualEffects(storage)).toEqual({
       mainBackground: true,
-      bottomPlayer: false,
-      lyrics: true
+      playerGlow: true
+    });
+  });
+
+  it("prefers the new player glow value and ignores the removed footer option", () => {
+    const storage = {
+      getItem: () => JSON.stringify({
+        mainBackground: false,
+        playerGlow: false,
+        bottomPlayer: true,
+        lyrics: true
+      })
+    };
+
+    expect(readStoredVisualEffects(storage)).toEqual({
+      mainBackground: false,
+      playerGlow: false
     });
   });
 

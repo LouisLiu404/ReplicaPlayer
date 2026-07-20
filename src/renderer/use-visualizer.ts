@@ -13,7 +13,7 @@ export function useVisualizer(
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const pulseFrameRef = useRef<number | null>(null);
   const mainPulseRef = useRef(0);
-  const footerPulseRef = useRef(0);
+  const playerPulseRef = useRef(0);
 
   useEffect(() => {
     if (!enabled) {
@@ -30,8 +30,8 @@ export function useVisualizer(
       return;
     }
 
-    function applyPulse(mainPulse: number, footerPulse: number): void {
-      applyShellPulse(appShellRef, mainPulse, footerPulse);
+    function applyPulse(mainPulse: number, playerPulse: number): void {
+      applyShellPulse(appShellRef, mainPulse, playerPulse);
     }
 
     const ensureAnalyser = (): boolean => {
@@ -87,15 +87,15 @@ export function useVisualizer(
       }
 
       mainPulseRef.current = smoothPulse(mainPulseRef.current, targetPulse, isActive);
-      footerPulseRef.current = smoothPulse(
-        footerPulseRef.current,
+      playerPulseRef.current = smoothPulse(
+        playerPulseRef.current,
         Math.min(targetPulse * 1.18, 1),
         isActive
       );
 
-      applyPulse(mainPulseRef.current, footerPulseRef.current);
+      applyPulse(mainPulseRef.current, playerPulseRef.current);
 
-      if (isActive || mainPulseRef.current > 0 || footerPulseRef.current > 0) {
+      if (isActive || mainPulseRef.current > 0 || playerPulseRef.current > 0) {
         pulseFrameRef.current = window.requestAnimationFrame(tick);
       }
     };
@@ -160,7 +160,7 @@ export function useVisualizer(
 function applyShellPulse(
   appShellRef: React.RefObject<HTMLDivElement | null>,
   mainPulse: number,
-  footerPulse: number
+  playerPulse: number
 ): void {
   const appShell = appShellRef.current;
   if (!appShell) {
@@ -168,5 +168,5 @@ function applyShellPulse(
   }
 
   appShell.style.setProperty("--streamer-main-pulse", mainPulse.toFixed(3));
-  appShell.style.setProperty("--streamer-footer-pulse", footerPulse.toFixed(3));
+  appShell.style.setProperty("--streamer-player-pulse", playerPulse.toFixed(3));
 }

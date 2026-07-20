@@ -22,26 +22,22 @@ vi.mock("./streamer", () => ({
     "--streamer-color-b": "rgba(255, 80, 0, 0.2)",
     "--streamer-color-c": "rgba(255, 200, 80, 0.2)",
     "--streamer-color-d": "rgba(255, 255, 255, 0.08)",
-    "--streamer-footer-a": "rgba(255, 120, 0, 0.18)",
-    "--streamer-footer-b": "rgba(255, 80, 0, 0.18)",
-    "--streamer-surface-tint": "rgba(255, 120, 0, 0.12)",
+    "--streamer-player-a": "rgba(255, 120, 0, 0.18)",
+    "--streamer-player-b": "rgba(255, 80, 0, 0.18)",
     "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
-    "--streamer-shell-wash": "rgba(255, 200, 80, 0.08)",
     "--streamer-opacity": "0.5",
-    "--streamer-footer-opacity": "0.32"
+    "--streamer-player-opacity": "0.32"
   },
   extractStreamerVars: vi.fn(async () => ({
     "--streamer-color-a": "rgba(255, 120, 0, 0.2)",
     "--streamer-color-b": "rgba(255, 80, 0, 0.2)",
     "--streamer-color-c": "rgba(255, 200, 80, 0.2)",
     "--streamer-color-d": "rgba(255, 255, 255, 0.08)",
-    "--streamer-footer-a": "rgba(255, 120, 0, 0.18)",
-    "--streamer-footer-b": "rgba(255, 80, 0, 0.18)",
-    "--streamer-surface-tint": "rgba(255, 120, 0, 0.12)",
+    "--streamer-player-a": "rgba(255, 120, 0, 0.18)",
+    "--streamer-player-b": "rgba(255, 80, 0, 0.18)",
     "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
-    "--streamer-shell-wash": "rgba(255, 200, 80, 0.08)",
     "--streamer-opacity": "0.5",
-    "--streamer-footer-opacity": "0.32"
+    "--streamer-player-opacity": "0.32"
   }))
 }));
 
@@ -174,27 +170,24 @@ vi.mock("./components/SettingsView", () => ({
     trackSort: string;
     visualEffects: {
       mainBackground: boolean;
-      bottomPlayer: boolean;
-      lyrics: boolean;
+      playerGlow: boolean;
     };
     onDefaultExpandedTabChange: (tab: "queue" | "lyrics" | "details") => void;
     onTrackSortChange: (sort: "title-asc" | "title-desc" | "modified-asc" | "modified-desc") => void;
-    onVisualEffectChange: (effect: "mainBackground" | "bottomPlayer" | "lyrics", enabled: boolean) => void;
+    onVisualEffectChange: (effect: "mainBackground" | "playerGlow", enabled: boolean) => void;
   }) => (
     <div data-testid="settings-view">
       <div data-testid="settings-default-tab">{defaultExpandedTab}</div>
       <div data-testid="settings-track-sort">{trackSort}</div>
       <div data-testid="settings-main-glow">{String(visualEffects.mainBackground)}</div>
-      <div data-testid="settings-footer-glow">{String(visualEffects.bottomPlayer)}</div>
-      <div data-testid="settings-lyrics-glow">{String(visualEffects.lyrics)}</div>
+      <div data-testid="settings-player-glow">{String(visualEffects.playerGlow)}</div>
       <button type="button" onClick={() => onDefaultExpandedTabChange("queue")}>Default Queue</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("lyrics")}>Default Lyrics</button>
       <button type="button" onClick={() => onDefaultExpandedTabChange("details")}>Default Details</button>
       <button type="button" onClick={() => onTrackSortChange("title-desc")}>Sort Title Desc</button>
       <button type="button" onClick={() => onTrackSortChange("modified-asc")}>Sort Modified Asc</button>
       <button type="button" onClick={() => onVisualEffectChange("mainBackground", true)}>Enable Main Glow</button>
-      <button type="button" onClick={() => onVisualEffectChange("bottomPlayer", true)}>Enable Footer Glow</button>
-      <button type="button" onClick={() => onVisualEffectChange("lyrics", true)}>Enable Lyrics Glow</button>
+      <button type="button" onClick={() => onVisualEffectChange("playerGlow", true)}>Enable Player Glow</button>
     </div>
   )
 }));
@@ -472,6 +465,35 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Collapse expanded player" })).toBeTruthy();
   });
 
+  it("enables player glow only while the expanded-player surface is mounted", async () => {
+    window.localStorage.setItem(VISUAL_EFFECTS_STORAGE_KEY, JSON.stringify({
+      mainBackground: false,
+      playerGlow: true
+    }));
+
+    await renderAppWithMock();
+
+    const appShell = document.querySelector(".app-shell") as HTMLElement;
+    await waitFor(() => {
+      expect(appShell.style.getPropertyValue("--player-glow-enabled")).toBe("0");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle expanded player" }));
+    await waitFor(() => {
+      expect(appShell.style.getPropertyValue("--player-glow-enabled")).toBe("1");
+    });
+    await waitFor(() => {
+      expect(document.querySelector(".expanded-player-overlay")?.classList.contains("open")).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse expanded player" }));
+    expect(appShell.style.getPropertyValue("--player-glow-enabled")).toBe("1");
+
+    await waitFor(() => {
+      expect(appShell.style.getPropertyValue("--player-glow-enabled")).toBe("0");
+    });
+  });
+
   it("persists the settings default tab and uses it on the next expansion", async () => {
     await renderAppWithMock();
 
@@ -565,19 +587,16 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     await waitFor(() => {
       expect(screen.getByTestId("settings-main-glow").textContent).toBe("false");
-      expect(screen.getByTestId("settings-footer-glow").textContent).toBe("false");
-      expect(screen.getByTestId("settings-lyrics-glow").textContent).toBe("false");
+      expect(screen.getByTestId("settings-player-glow").textContent).toBe("false");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Enable Footer Glow" }));
-    fireEvent.click(screen.getByRole("button", { name: "Enable Lyrics Glow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable Player Glow" }));
 
     await waitFor(() => {
       expect(window.localStorage.getItem(VISUAL_EFFECTS_STORAGE_KEY)).toBe(
         JSON.stringify({
           mainBackground: false,
-          bottomPlayer: true,
-          lyrics: true
+          playerGlow: true
         })
       );
     });

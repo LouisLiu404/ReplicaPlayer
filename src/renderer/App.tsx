@@ -606,11 +606,13 @@ export function App() {
       appShell.style.setProperty(key, value);
     }
 
-    appShell.style.setProperty("--streamer-play-state", isPlaying ? "running" : "paused");
+    appShell.style.setProperty("--player-glow-play-state", isPlaying ? "running" : "paused");
     appShell.style.setProperty("--main-glow-enabled", visualEffects.mainBackground ? "1" : "0");
-    appShell.style.setProperty("--footer-glow-enabled", visualEffects.bottomPlayer ? "1" : "0");
-    appShell.style.setProperty("--lyrics-glow-enabled", visualEffects.lyrics ? "1" : "0");
-  }, [isPlaying, streamerVars, visualEffects]);
+    appShell.style.setProperty(
+      "--player-glow-enabled",
+      visualEffects.playerGlow && renderExpandedPlayer ? "1" : "0"
+    );
+  }, [isPlaying, renderExpandedPlayer, streamerVars, visualEffects]);
 
   // Reset availability filter when counts drop to zero
   useEffect(() => {

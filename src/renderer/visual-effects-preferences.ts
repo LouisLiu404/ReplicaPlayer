@@ -1,15 +1,13 @@
 export type VisualEffectsPreferences = {
   mainBackground: boolean;
-  bottomPlayer: boolean;
-  lyrics: boolean;
+  playerGlow: boolean;
 };
 
 export type VisualEffectKey = keyof VisualEffectsPreferences;
 
 export const DEFAULT_VISUAL_EFFECTS: VisualEffectsPreferences = {
   mainBackground: false,
-  bottomPlayer: false,
-  lyrics: false
+  playerGlow: false
 };
 
 export const VISUAL_EFFECTS_STORAGE_KEY = "replica-player:visual-effects";
@@ -27,11 +25,12 @@ export function readStoredVisualEffects(
       return DEFAULT_VISUAL_EFFECTS;
     }
 
-    const parsed = JSON.parse(raw) as Partial<VisualEffectsPreferences>;
+    const parsed = JSON.parse(raw) as Partial<VisualEffectsPreferences> & {
+      lyrics?: boolean;
+    };
     return {
       mainBackground: parsed.mainBackground ?? DEFAULT_VISUAL_EFFECTS.mainBackground,
-      bottomPlayer: parsed.bottomPlayer ?? DEFAULT_VISUAL_EFFECTS.bottomPlayer,
-      lyrics: parsed.lyrics ?? DEFAULT_VISUAL_EFFECTS.lyrics
+      playerGlow: parsed.playerGlow ?? parsed.lyrics ?? DEFAULT_VISUAL_EFFECTS.playerGlow
     };
   } catch {
     return DEFAULT_VISUAL_EFFECTS;

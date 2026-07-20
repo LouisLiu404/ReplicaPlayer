@@ -15,13 +15,11 @@ export type StreamerVars = {
   "--streamer-color-b": string;
   "--streamer-color-c": string;
   "--streamer-color-d": string;
-  "--streamer-footer-a": string;
-  "--streamer-footer-b": string;
-  "--streamer-surface-tint": string;
+  "--streamer-player-a": string;
+  "--streamer-player-b": string;
   "--streamer-surface-highlight": string;
-  "--streamer-shell-wash": string;
   "--streamer-opacity": string;
-  "--streamer-footer-opacity": string;
+  "--streamer-player-opacity": string;
 };
 
 export const DEFAULT_STREAMER_VARS: StreamerVars = {
@@ -29,13 +27,11 @@ export const DEFAULT_STREAMER_VARS: StreamerVars = {
   "--streamer-color-b": "rgba(255, 168, 95, 0.22)",
   "--streamer-color-c": "rgba(255, 85, 38, 0.16)",
   "--streamer-color-d": "rgba(255, 209, 143, 0.12)",
-  "--streamer-footer-a": "rgba(255, 120, 92, 0.24)",
-  "--streamer-footer-b": "rgba(255, 184, 78, 0.18)",
-  "--streamer-surface-tint": "rgba(255, 132, 102, 0.14)",
+  "--streamer-player-a": "rgba(255, 120, 92, 0.24)",
+  "--streamer-player-b": "rgba(255, 184, 78, 0.18)",
   "--streamer-surface-highlight": "rgba(255, 210, 146, 0.12)",
-  "--streamer-shell-wash": "rgba(255, 168, 95, 0.1)",
   "--streamer-opacity": "0.92",
-  "--streamer-footer-opacity": "0.84"
+  "--streamer-player-opacity": "0.84"
 };
 
 type PaletteProfile = {
@@ -319,24 +315,20 @@ export function deriveStreamerVarsFromPixels(pixels: Uint8ClampedArray): Streame
     mixColors(highlight, { r: 255, g: 255, b: 255 }, 0.14 + (darkArtworkBias * 0.28)),
     0.36 + (contrastLift * 0.16)
   );
-  const footerHighlight = mixColors(highlight, luminousHighlight, 0.36 + (contrastLift * 0.14));
-  const footerAccent = mixColors(accent, luminousHighlight, 0.2 + (contrastLift * 0.12));
-  const surfaceTint = mixColors(base, soft, 0.5);
+  const playerHighlight = mixColors(highlight, luminousHighlight, 0.36 + (contrastLift * 0.14));
+  const playerAccent = mixColors(accent, luminousHighlight, 0.2 + (contrastLift * 0.12));
   const surfaceHighlight = mixColors(luminousHighlight, soft, 0.28);
-  const shellWash = mixColors(luminousHighlight, { r: 255, g: 255, b: 255 }, 0.12 + (darkArtworkBias * 0.08));
 
   return {
     "--streamer-color-a": toRgba(base, 0.24 + (contrastLift * 0.08)),
     "--streamer-color-b": toRgba(highlight, 0.2 + (contrastLift * 0.08)),
     "--streamer-color-c": toRgba(accent, 0.18 + (contrastLift * 0.08)),
     "--streamer-color-d": toRgba(soft, 0.16 + (contrastLift * 0.08)),
-    "--streamer-footer-a": toRgba(footerHighlight, 0.26 + (darkArtworkBias * 0.12)),
-    "--streamer-footer-b": toRgba(footerAccent, 0.2 + (darkArtworkBias * 0.1)),
-    "--streamer-surface-tint": toRgba(surfaceTint, 0.14 + (darkArtworkBias * 0.08)),
+    "--streamer-player-a": toRgba(playerHighlight, 0.26 + (darkArtworkBias * 0.12)),
+    "--streamer-player-b": toRgba(playerAccent, 0.2 + (darkArtworkBias * 0.1)),
     "--streamer-surface-highlight": toRgba(surfaceHighlight, 0.12 + (darkArtworkBias * 0.08)),
-    "--streamer-shell-wash": toRgba(shellWash, 0.1 + (darkArtworkBias * 0.06)),
     "--streamer-opacity": (0.94 + (darkArtworkBias * 0.16)).toFixed(2),
-    "--streamer-footer-opacity": (0.88 + (darkArtworkBias * 0.18)).toFixed(2)
+    "--streamer-player-opacity": (0.88 + (darkArtworkBias * 0.18)).toFixed(2)
   };
 }
 

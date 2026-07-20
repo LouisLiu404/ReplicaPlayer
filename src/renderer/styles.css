@@ -39,24 +39,21 @@
   --streamer-color-b: rgba(255, 168, 95, 0.22);
   --streamer-color-c: rgba(255, 85, 38, 0.16);
   --streamer-color-d: rgba(255, 209, 143, 0.12);
-  --streamer-footer-a: rgba(255, 120, 92, 0.24);
-  --streamer-footer-b: rgba(255, 184, 78, 0.18);
-  --streamer-surface-tint: rgba(255, 132, 102, 0.14);
+  --streamer-player-a: rgba(255, 120, 92, 0.24);
+  --streamer-player-b: rgba(255, 184, 78, 0.18);
   --streamer-surface-highlight: rgba(255, 210, 146, 0.12);
-  --streamer-shell-wash: rgba(255, 168, 95, 0.1);
   --streamer-opacity: 0.92;
-  --streamer-footer-opacity: 0.84;
-  --streamer-play-state: paused;
+  --streamer-player-opacity: 0.84;
+  --player-glow-play-state: paused;
   --streamer-main-pulse: 0;
-  --streamer-footer-pulse: 0;
+  --streamer-player-pulse: 0;
   --window-glow-activity: 1;
   --window-glow-saturation-shift: 0%;
   --titlebar-glass: rgba(9, 9, 11, 0.4);
   --titlebar-glass-leading: rgba(9, 9, 11, 0.52);
   --titlebar-edge: rgba(255, 255, 255, 0.035);
   --main-glow-enabled: 1;
-  --footer-glow-enabled: 1;
-  --lyrics-glow-enabled: 1;
+  --player-glow-enabled: 0;
   --surface-0: rgba(10, 10, 12, 0.98);
   --surface-1: rgba(18, 18, 22, 0.96);
   --surface-2: rgba(24, 24, 28, 0.96);
@@ -145,8 +142,8 @@ img {
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    var(--streamer-footer-a) 0%,
-    var(--streamer-footer-b) 30%,
+    var(--streamer-player-a) 0%,
+    var(--streamer-player-b) 30%,
     var(--streamer-color-c) 51%,
     transparent 60%
   );
@@ -1284,6 +1281,36 @@ img {
     opacity 180ms ease;
 }
 
+.expanded-player-overlay::after {
+  content: "";
+  position: absolute;
+  inset: -14% -9%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 12% 38%, var(--streamer-player-a) 0%, transparent 43%),
+    radial-gradient(ellipse at 72% 24%, var(--streamer-player-b) 0%, transparent 46%),
+    radial-gradient(ellipse at 44% 88%, var(--streamer-color-c) 0%, transparent 48%),
+    radial-gradient(ellipse at 94% 70%, var(--streamer-color-d) 0%, transparent 38%);
+  filter:
+    blur(calc(64px + (var(--streamer-player-pulse) * 18px)))
+    saturate(calc(136% + (var(--streamer-player-pulse) * 18%)));
+  opacity: calc(
+    var(--streamer-player-opacity) *
+    0.58 *
+    (1 + (var(--streamer-player-pulse) * 0.42)) *
+    var(--player-glow-enabled) *
+    var(--window-glow-activity)
+  );
+  mix-blend-mode: screen;
+  animation: streamer-drift-primary 16s ease-in-out infinite alternate;
+  animation-play-state: var(--player-glow-play-state);
+  transition:
+    opacity 180ms ease,
+    filter 160ms ease;
+  will-change: opacity, filter, transform;
+}
+
 .expanded-player-overlay > .expanded-player-view,
 .expanded-player-overlay > .overlay-banner {
   position: relative;
@@ -1943,37 +1970,6 @@ img {
   isolation: isolate;
 }
 
-.lyrics-stage::before,
-.lyrics-stage::after {
-  content: "";
-  position: absolute;
-  inset: -24% -12%;
-  pointer-events: none;
-  z-index: 0;
-  filter: blur(72px) saturate(132%);
-  opacity: calc(var(--streamer-opacity) * 0.52 * var(--lyrics-glow-enabled));
-  animation-play-state: var(--expanded-play-state);
-  mix-blend-mode: screen;
-  will-change: transform, opacity;
-}
-
-.lyrics-stage::before {
-  background:
-    radial-gradient(circle at 18% 16%, var(--streamer-color-a) 0%, transparent 42%),
-    radial-gradient(circle at 82% 18%, var(--streamer-color-b) 0%, transparent 38%),
-    radial-gradient(circle at 52% 84%, var(--streamer-color-c) 0%, transparent 46%);
-  animation: streamer-drift-primary 14s ease-in-out infinite alternate;
-}
-
-.lyrics-stage::after {
-  background:
-    radial-gradient(circle at 24% 82%, var(--streamer-color-d) 0%, transparent 34%),
-    radial-gradient(circle at 78% 74%, var(--streamer-color-a) 0%, transparent 34%),
-    radial-gradient(circle at 50% 44%, var(--streamer-color-b) 0%, transparent 38%);
-  opacity: calc(var(--streamer-opacity) * 0.38 * var(--lyrics-glow-enabled));
-  animation: streamer-drift-secondary 18s ease-in-out infinite alternate;
-}
-
 .lyrics-stage-head {
   position: relative;
   z-index: 1;
@@ -2525,22 +2521,27 @@ img {
 .bottom-player-surface::before {
   content: "";
   position: absolute;
-  inset: 14px 10% 14px 6%;
+  inset: -10px -4% -14px;
   border-radius: 999px;
   background:
-    radial-gradient(circle at 10% 50%, var(--streamer-footer-a) 0%, transparent 40%),
-    radial-gradient(circle at 30% 50%, var(--streamer-footer-a) 0%, transparent 48%),
-    radial-gradient(circle at 52% 48%, var(--streamer-footer-b) 0%, transparent 42%),
-    radial-gradient(circle at 70% 50%, var(--streamer-footer-b) 0%, transparent 46%);
+    radial-gradient(circle at 8% 50%, var(--streamer-player-a) 0%, transparent 38%),
+    radial-gradient(circle at 34% 50%, var(--streamer-player-a) 0%, transparent 46%),
+    radial-gradient(circle at 66% 48%, var(--streamer-player-b) 0%, transparent 44%),
+    radial-gradient(circle at 94% 50%, var(--streamer-color-c) 0%, transparent 40%);
   filter:
-    blur(calc(48px + (var(--streamer-footer-pulse) * 18px)))
-    saturate(calc(140% + (var(--streamer-footer-pulse) * 16%)));
-  opacity: calc((var(--streamer-footer-opacity) * 1.34) * (1 + (var(--streamer-footer-pulse) * 0.84)) * var(--footer-glow-enabled));
+    blur(calc(48px + (var(--streamer-player-pulse) * 18px)))
+    saturate(calc(140% + (var(--streamer-player-pulse) * 16%)));
+  opacity: calc(
+    var(--streamer-player-opacity) *
+    1.08 *
+    (1 + (var(--streamer-player-pulse) * 0.72)) *
+    var(--player-glow-enabled)
+  );
   pointer-events: none;
   z-index: 0;
-  animation: streamer-drift-footer 12s ease-in-out infinite alternate;
-  animation-play-state: var(--streamer-play-state);
-  transform: scale(calc(1 + (var(--streamer-footer-pulse) * 0.07)));
+  animation: streamer-drift-player 12s ease-in-out infinite alternate;
+  animation-play-state: var(--player-glow-play-state);
+  transform: scale(calc(1 + (var(--streamer-player-pulse) * 0.07)));
   mix-blend-mode: screen;
   transition:
     opacity 140ms ease,
@@ -2554,11 +2555,10 @@ img {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, var(--streamer-shell-wash), transparent 42%),
-    linear-gradient(135deg, var(--streamer-surface-highlight), transparent 42%),
-    linear-gradient(160deg, var(--streamer-surface-tint), transparent 76%),
-    rgba(6, 7, 10, 0.08);
-  opacity: var(--footer-glow-enabled);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 42%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.018), transparent 66%),
+    rgba(6, 7, 10, 0.22);
+  opacity: 1;
   pointer-events: none;
   z-index: 1;
 }
@@ -2571,17 +2571,21 @@ img {
 .bottom-player.expanded-surface .bottom-player-surface::after {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 36%),
-    linear-gradient(135deg, var(--streamer-surface-highlight), transparent 48%),
-    linear-gradient(160deg, var(--streamer-surface-tint), transparent 78%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.018), transparent 64%),
     rgba(6, 7, 10, 0.42);
 }
 
 .bottom-player.settings-surface .bottom-player-surface::before {
   inset: 16px 12% 18px 8%;
   filter:
-    blur(calc(40px + (var(--streamer-footer-pulse) * 14px)))
-    saturate(calc(130% + (var(--streamer-footer-pulse) * 12%)));
-  opacity: calc((var(--streamer-footer-opacity) * 0.98) * (1 + (var(--streamer-footer-pulse) * 0.42)) * var(--footer-glow-enabled));
+    blur(calc(40px + (var(--streamer-player-pulse) * 14px)))
+    saturate(calc(130% + (var(--streamer-player-pulse) * 12%)));
+  opacity: calc(
+    var(--streamer-player-opacity) *
+    0.88 *
+    (1 + (var(--streamer-player-pulse) * 0.42)) *
+    var(--player-glow-enabled)
+  );
 }
 
 .bottom-player-layout {
@@ -3037,16 +3041,7 @@ img {
   }
 }
 
-@keyframes streamer-drift-secondary {
-  0% {
-    transform: translate3d(4%, 4%, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(-5%, -4%, 0) scale(1.14) rotate(-10deg);
-  }
-}
-
-@keyframes streamer-drift-footer {
+@keyframes streamer-drift-player {
   0% {
     transform: translate3d(-5%, 0, 0) scaleX(0.92) scaleY(0.96);
   }
@@ -3117,8 +3112,7 @@ img {
       filter 180ms ease;
   }
 
-  .lyrics-stage::before,
-  .lyrics-stage::after,
+  .expanded-player-overlay::after,
   .bottom-player-surface::before {
     animation: none;
   }
