@@ -38,6 +38,73 @@ describe("buildProgressTooltipLeft", () => {
 });
 
 describe("BottomPlayer", () => {
+  it("uses the artwork as the only expanded-player control", () => {
+    const onTogglePanel = vi.fn();
+    const { container } = render(
+      <BottomPlayer
+        track={TRACK}
+        isPlaying={false}
+        isExpanded={false}
+        isSettingsView={false}
+        canPlay
+        playbackMode="repeat-all"
+        currentTimeMs={0}
+        durationMs={TRACK.durationMs}
+        volumePercent={100}
+        canStepPrev
+        canStepNext
+        onStepPrev={vi.fn()}
+        onStepNext={vi.fn()}
+        onTogglePlay={vi.fn()}
+        onSeek={vi.fn()}
+        onVolumeChange={vi.fn()}
+        onCyclePlaybackMode={vi.fn()}
+        onTogglePanel={onTogglePanel}
+      />
+    );
+
+    const expandButton = screen.getByRole("button", { name: "Expand player" });
+    expect(container.querySelector(".panel-expand-button")).toBeNull();
+    fireEvent.click(expandButton);
+    expect(onTogglePanel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps volume compact and reports changes from the hover popover", () => {
+    const onVolumeChange = vi.fn();
+    const { container } = render(
+      <BottomPlayer
+        track={TRACK}
+        isPlaying={false}
+        isExpanded={false}
+        isSettingsView={false}
+        canPlay
+        playbackMode="repeat-all"
+        currentTimeMs={0}
+        durationMs={TRACK.durationMs}
+        volumePercent={80}
+        canStepPrev
+        canStepNext
+        onStepPrev={vi.fn()}
+        onStepNext={vi.fn()}
+        onTogglePlay={vi.fn()}
+        onSeek={vi.fn()}
+        onVolumeChange={onVolumeChange}
+        onCyclePlaybackMode={vi.fn()}
+        onTogglePanel={vi.fn()}
+      />
+    );
+
+    const slider = container.querySelector(".volume-slider");
+    if (!(slider instanceof HTMLInputElement)) {
+      throw new Error("Volume slider not found");
+    }
+    expect(container.querySelector(".volume-popover")).not.toBeNull();
+    expect(screen.getByText("80%")).toBeTruthy();
+
+    fireEvent.change(slider, { target: { value: "42" } });
+    expect(onVolumeChange).toHaveBeenCalledWith(42);
+  });
+
   it("throttles pointer move updates via requestAnimationFrame", () => {
     let lastRafCallback: FrameRequestCallback | null = null;
     let rafId = 0;

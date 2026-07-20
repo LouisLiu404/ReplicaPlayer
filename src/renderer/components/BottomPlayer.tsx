@@ -5,8 +5,6 @@ import type { TrackDetail } from "../../shared/types";
 import type { PlaybackMode } from "../playback";
 import { formatDuration } from "../utils";
 import {
-  ChevronDownIcon,
-  ChevronUpIcon,
   DiscIcon,
   NextIcon,
   PauseIcon,
@@ -37,7 +35,6 @@ interface BottomPlayerProps {
   onCyclePlaybackMode: () => void;
   onTogglePanel: () => void;
   playerArtButtonRef?: RefObject<HTMLButtonElement | null>;
-  panelExpandButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function buildProgressTooltipLeft(leftPercent: number): string {
@@ -64,8 +61,7 @@ export function BottomPlayer({
   onVolumeChange,
   onCyclePlaybackMode,
   onTogglePanel,
-  playerArtButtonRef,
-  panelExpandButtonRef
+  playerArtButtonRef
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
   const progressPercent = track ? Math.min(Math.max(currentTimeMs / totalDuration, 0), 1) : 0;
@@ -206,32 +202,26 @@ export function BottomPlayer({
             </div>
           </div>
 
-          <div className="bottom-player-trailing">
-            <div className="volume-control">
-              <VolumeIcon className="volume-icon" />
-              <input
-                type="range"
-                className="volume-slider"
-                min={0}
-                max={100}
-                value={volumePercent}
-                onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
-                aria-label="Volume"
-              />
-            </div>
+          <div className="bottom-player-trailing" />
+        </div>
+      </div>
 
-            <button
-              ref={panelExpandButtonRef}
-              type="button"
-              className="panel-expand-button"
-              onClick={onTogglePanel}
-              disabled={!track}
-              aria-expanded={isExpanded}
-              aria-label={isExpanded ? "Collapse expanded player" : "Expand player"}
-            >
-              {isExpanded ? <ChevronDownIcon /> : <ChevronUpIcon />}
-            </button>
+      <div className="volume-control">
+        <VolumeIcon className="volume-icon" />
+        <div className="volume-popover">
+          <div className="volume-slider-shell">
+            <input
+              type="range"
+              className="volume-slider"
+              min={0}
+              max={100}
+              value={volumePercent}
+              onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
+              aria-label="Volume"
+              aria-valuetext={`${Math.round(volumePercent)}%`}
+            />
           </div>
+          <span className="volume-value" aria-hidden="true">{Math.round(volumePercent)}%</span>
         </div>
       </div>
     </footer>

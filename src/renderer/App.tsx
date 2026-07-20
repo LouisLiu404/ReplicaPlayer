@@ -125,7 +125,6 @@ export function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const expandedPlayerOverlayRef = useRef<HTMLDivElement | null>(null);
   const playerArtButtonRef = useRef<HTMLButtonElement | null>(null);
-  const panelExpandButtonRef = useRef<HTMLButtonElement | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new LruCache<string, TrackListItem[]>(32));
   const streamerCacheRef = useRef(new LruCache<string, StreamerVars>(128));
@@ -172,7 +171,7 @@ export function App() {
     setIsPlayerExpanded(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
-        panelExpandButtonRef.current?.focus();
+        playerArtButtonRef.current?.focus();
       });
     }
   }, [expandedPlayerPhase]);
@@ -1146,7 +1145,6 @@ export function App() {
         onCyclePlaybackMode={handleCyclePlaybackMode}
         onTogglePanel={handleTogglePanel}
         playerArtButtonRef={playerArtButtonRef}
-        panelExpandButtonRef={panelExpandButtonRef}
       />
     </div>
   );

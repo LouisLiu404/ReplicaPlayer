@@ -69,6 +69,7 @@ describe("ExpandedPlayer lyrics header", () => {
     );
 
     expect(screen.getByRole("heading", { name: TRACK.title })).toBeTruthy();
+    expect(screen.queryByText("Now playing locally")).toBeNull();
     expect(screen.getByText(TRACK.artist)).toBeTruthy();
     expect(screen.getByText(TRACK.album)).toBeTruthy();
     expect(container.querySelector(".record-platter")).toBeTruthy();

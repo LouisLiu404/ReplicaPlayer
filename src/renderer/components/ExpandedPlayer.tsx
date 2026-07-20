@@ -311,7 +311,6 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
 
         <div className="expanded-panel">
           <header className="expanded-track-header">
-            <p className="expanded-track-kicker">Now playing locally</p>
             <h1 title={trackDetail?.title}>{trackDetail?.title ?? "Nothing selected"}</h1>
             {identityLabels.length > 0 ? (
               <p className="expanded-track-identity">
