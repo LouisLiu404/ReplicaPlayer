@@ -422,6 +422,40 @@ async function renderAppWithMock() {
 }
 
 describe("App", () => {
+  it("keeps one dedicated window drag strip across app views", async () => {
+    await renderAppWithMock();
+
+    const dragStrip = document.querySelector(".window-drag-strip");
+    expect(dragStrip).not.toBeNull();
+    expect(document.querySelectorAll(".window-drag-strip")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-view")).toBeTruthy();
+    });
+    expect(document.querySelector(".window-drag-strip")).toBe(dragStrip);
+
+    fireEvent.click(screen.getByRole("button", { name: "All folders 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle expanded player" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("expanded-player")).toBeTruthy();
+    });
+    expect(document.querySelector(".window-drag-strip")).toBe(dragStrip);
+  });
+
+  it("subdues the shell glow while the window is inactive", async () => {
+    await renderAppWithMock();
+
+    const appShell = document.querySelector(".app-shell");
+    expect(appShell?.classList.contains("window-active")).toBe(true);
+
+    fireEvent.blur(window);
+    expect(appShell?.classList.contains("window-inactive")).toBe(true);
+
+    fireEvent.focus(window);
+    expect(appShell?.classList.contains("window-active")).toBe(true);
+  });
+
   it("opens the stored default expanded tab when the player is expanded", async () => {
     window.localStorage.setItem(DEFAULT_EXPANDED_TAB_STORAGE_KEY, "details");
 
@@ -432,6 +466,10 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByTestId("expanded-active-tab").textContent).toBe("details");
     });
+
+    const overlay = document.querySelector(".expanded-player-overlay");
+    expect(overlay?.parentElement?.classList.contains("app-workspace")).toBe(true);
+    expect(screen.getByRole("button", { name: "Collapse expanded player" })).toBeTruthy();
   });
 
   it("persists the settings default tab and uses it on the next expansion", async () => {

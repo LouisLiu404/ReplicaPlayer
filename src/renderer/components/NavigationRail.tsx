@@ -2,7 +2,7 @@ import { memo } from "react";
 
 import type { LibraryRoot } from "../../shared/types";
 import type { AppView } from "./ui-types";
-import { PlayerGlyph, ReplicaWordmark, SettingsIcon } from "./icons";
+import { SettingsIcon } from "./icons";
 
 interface NavigationRailProps {
   activeView: AppView;
@@ -28,11 +28,6 @@ export const NavigationRail = memo(function NavigationRail({
 
   return (
     <aside className="navigation-rail">
-      <div className="rail-topmark" aria-hidden="true">
-        <PlayerGlyph className="rail-topmark-icon" />
-        <ReplicaWordmark className="rail-topmark-wordmark" />
-      </div>
-
       <div className="rail-roots">
         <div className="rail-section-header">
           <span>Folders</span>

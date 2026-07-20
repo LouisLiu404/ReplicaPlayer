@@ -16,6 +16,7 @@ import type {
 } from "../shared/types";
 import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
+import { ChevronDownIcon } from "./components/icons";
 import { LibraryHero } from "./components/LibraryHero";
 import { NavigationRail } from "./components/NavigationRail";
 import { ScanProgressModal } from "./components/ScanProgressModal";
@@ -108,11 +109,13 @@ export function App() {
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const panelExpandButtonRef = useRef<HTMLButtonElement | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new LruCache<string, TrackListItem[]>(32));
   const streamerCacheRef = useRef(new LruCache<string, StreamerVars>(128));
   const scanModalSeenFilesRef = useRef(new Map<string, Set<string>>());
 
+  const [isWindowActive, setIsWindowActive] = useState(true);
   const [activeView, setActiveView] = useState<AppView>("library");
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<TrackListItem[]>([]);
@@ -144,6 +147,15 @@ export function App() {
   );
 
   const deferredSearch = useDeferredValue(search);
+
+  const collapseExpandedPlayer = useCallback((restoreFocus = false): void => {
+    setIsPlayerExpanded(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => {
+        panelExpandButtonRef.current?.focus();
+      });
+    }
+  }, []);
 
   activePanelTabRef.current = activePanelTab;
 
@@ -196,6 +208,19 @@ export function App() {
 
   useVisualizer(audioRef, appShellRef, true);
 
+  useEffect(() => {
+    const handleWindowFocus = () => setIsWindowActive(true);
+    const handleWindowBlur = () => setIsWindowActive(false);
+
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -215,7 +240,7 @@ export function App() {
       }
 
       if (event.key === "Escape" && isPlayerExpanded) {
-        setIsPlayerExpanded(false);
+        collapseExpandedPlayer(true);
       }
     };
 
@@ -223,7 +248,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isPlayerExpanded]);
+  }, [collapseExpandedPlayer, isPlayerExpanded]);
 
   // Load library roots
   useEffect(() => {
@@ -784,8 +809,8 @@ export function App() {
       return;
     }
 
-    setIsPlayerExpanded(false);
-  }, [defaultExpandedTab, isPlayerExpanded]);
+    collapseExpandedPlayer(true);
+  }, [collapseExpandedPlayer, defaultExpandedTab, isPlayerExpanded]);
 
   const handleSetLyricRef = useCallback((index: number, element: HTMLDivElement | null): void => {
     lyricRefs.current.set(index, element);
@@ -853,7 +878,10 @@ export function App() {
       : null;
 
   return (
-    <div ref={appShellRef} className="app-shell">
+    <div
+      ref={appShellRef}
+      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"}`}
+    >
       <audio ref={audioRef} />
       <ScanProgressModal
         scan={scanModal}
@@ -865,6 +893,19 @@ export function App() {
         }}
         toFileLabel={toScanFileLabel}
       />
+
+      <div className="window-drag-strip">
+        {isPlayerExpanded ? (
+          <button
+            type="button"
+            className="window-collapse-button"
+            onClick={() => collapseExpandedPlayer(true)}
+            aria-label="Collapse expanded player"
+          >
+            <ChevronDownIcon />
+          </button>
+        ) : null}
+      </div>
 
       <div className={`app-workspace ${isPlayerExpanded ? "expanded" : ""}`}>
         <NavigationRail
@@ -960,34 +1001,35 @@ export function App() {
               </div>
             ) : null}
 
-            {renderExpandedPlayer ? (
-              <div
-                className={`expanded-player-overlay ${expandedPlayerPhase}`}
-                style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_TRANSITION_MS}ms` } as CSSProperties}
-              >
-                {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
-                {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
-                <div className="expanded-player-view">
-                  <ExpandedPlayer
-                    activeTab={activePanelTab}
-                    selectedTrackId={selectedTrackId}
-                    queueTracks={visibleTracks}
-                    queueStartIndex={selectedTrackIndex}
-                    trackDetail={trackDetail}
-                    lyrics={lyrics}
-                    activeLyricLine={activeLyricLine}
-                    streamerVars={streamerVars}
-                    isPlaying={isPlaying}
-                    onSelectTrack={setSelectedTrackId}
-                    onTabChange={handlePanelTabChange}
-                    setLyricRef={handleSetLyricRef}
-                    setLyricsScrollRef={handleSetLyricsScrollRef}
-                  />
-                </div>
-              </div>
-            ) : null}
           </main>
         </div>
+
+        {renderExpandedPlayer ? (
+          <div
+            className={`expanded-player-overlay ${expandedPlayerPhase}`}
+            style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_TRANSITION_MS}ms` } as CSSProperties}
+          >
+            {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
+            {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
+            <div className="expanded-player-view">
+              <ExpandedPlayer
+                activeTab={activePanelTab}
+                selectedTrackId={selectedTrackId}
+                queueTracks={visibleTracks}
+                queueStartIndex={selectedTrackIndex}
+                trackDetail={trackDetail}
+                lyrics={lyrics}
+                activeLyricLine={activeLyricLine}
+                streamerVars={streamerVars}
+                isPlaying={isPlaying}
+                onSelectTrack={setSelectedTrackId}
+                onTabChange={handlePanelTabChange}
+                setLyricRef={handleSetLyricRef}
+                setLyricsScrollRef={handleSetLyricsScrollRef}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <BottomPlayer
@@ -1022,6 +1064,7 @@ export function App() {
         onVolumeChange={handleVolumeChange}
         onCyclePlaybackMode={handleCyclePlaybackMode}
         onTogglePanel={handleTogglePanel}
+        panelExpandButtonRef={panelExpandButtonRef}
       />
     </div>
   );

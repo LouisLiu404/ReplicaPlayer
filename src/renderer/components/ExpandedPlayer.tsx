@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type KeyboardEvent,
   memo,
   useEffect,
   useMemo,
@@ -43,8 +44,8 @@ interface ExpandedPlayerProps {
 }
 
 const TABS: Array<{ id: ActivePanelTab; label: string }> = [
-  { id: "queue", label: "Up Next" },
   { id: "lyrics", label: "Lyrics" },
+  { id: "queue", label: "Up Next" },
   { id: "details", label: "Details" }
 ];
 
@@ -152,6 +153,10 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
         availabilityDescription(trackDetail.availability)
       ].filter((value): value is string => Boolean(value))
     : [];
+  const identityLabels = trackDetail
+    ? [trackDetail.artist, trackDetail.album, trackDetail.year?.toString()]
+        .filter((value): value is string => Boolean(value))
+    : [];
   const lyricsHaveTranslations = useMemo(() => hasLyricTranslations(lyrics), [lyrics]);
   const lyricsSource = useMemo(() => lyricSourceBadge(lyrics.source), [lyrics.source]);
   const lyricDisplayParts = useMemo(
@@ -159,50 +164,144 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
     [lyrics]
   );
 
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabIndex: number): void => {
+    const lastTabIndex = TABS.length - 1;
+    const nextTabIndex =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? (tabIndex + 1) % TABS.length
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? (tabIndex - 1 + TABS.length) % TABS.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? lastTabIndex
+              : null;
+
+    if (nextTabIndex == null) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextTab = TABS[nextTabIndex];
+    onTabChange(nextTab.id);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`expanded-tab-${nextTab.id}`)?.focus();
+    });
+  };
+
   return (
-    <section className="expanded-player">
+    <section
+      className="expanded-player"
+      aria-label="Expanded player"
+      style={{
+        ...streamerVars,
+        "--expanded-play-state": isPlaying ? "running" : "paused"
+      } as CSSProperties}
+    >
       <div className="expanded-player-grid">
         <div className="expanded-stage">
-          <div className="expanded-stage-art">
-            {trackDetail?.artworkUrl ? (
-              <img
-                src={trackDetail.artworkUrl}
-                alt={trackDetail.title}
-                className="expanded-stage-image"
-              />
-            ) : (
-              <div className="expanded-stage-fallback">
-                <DiscIcon className="expanded-stage-glyph" />
+          <div className={`record-deck ${isPlaying ? "is-playing" : ""}`}>
+            <div className="record-shadow" aria-hidden="true" />
+            <div className="record-platter">
+              <div className="record-grooves" aria-hidden="true" />
+              <div className="record-label">
+                {trackDetail?.artworkUrl ? (
+                  <img
+                    key={trackDetail.artworkUrl}
+                    src={trackDetail.artworkUrl}
+                    alt={trackDetail.title}
+                    className="expanded-stage-image"
+                  />
+                ) : (
+                  <div className="expanded-stage-fallback">
+                    <DiscIcon className="expanded-stage-glyph" />
+                  </div>
+                )}
+                <span className="record-spindle" aria-hidden="true" />
               </div>
-            )}
-          </div>
-
-          {stageLabels.length > 0 ? (
-            <div className="expanded-stage-meta">
-              {stageLabels.map((label) => (
-                <span key={label}>{label}</span>
-              ))}
             </div>
-          ) : null}
+            <div className="record-tonearm" aria-hidden="true">
+              <svg className="tonearm-assembly" viewBox="0 0 300 190" focusable="false">
+                <defs>
+                  <linearGradient id="tonearm-metal" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stopColor="#ffffff" />
+                    <stop offset="0.54" stopColor="#eef0ef" />
+                    <stop offset="1" stopColor="#b8bdc0" />
+                  </linearGradient>
+                  <linearGradient id="tonearm-cartridge" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#ffffff" />
+                    <stop offset="1" stopColor="#d8dcdd" />
+                  </linearGradient>
+                </defs>
+                <circle className="tonearm-pivot-housing" cx="28" cy="28" r="27" />
+                <circle className="tonearm-pivot-ring" cx="28" cy="28" r="17" />
+                <circle className="tonearm-pivot-cap" cx="28" cy="28" r="7" />
+                <path
+                  className="tonearm-rail-shadow"
+                  d="M 31 31 C 73 70, 112 111, 158 134 C 187 149, 216 145, 246 151"
+                />
+                <path
+                  className="tonearm-rail"
+                  d="M 31 31 C 73 70, 112 111, 158 134 C 187 149, 216 145, 246 151"
+                />
+                <path className="tonearm-collar" d="M 242 150 L 263 154" />
+                <g className="tonearm-head" transform="translate(258 141) rotate(6)">
+                  <rect width="37" height="27" rx="5" />
+                  <path d="M 7 4 H 29" />
+                  <path d="M 7 9 H 29" />
+                  <path className="tonearm-stylus" d="M 30 23 L 35 30" />
+                </g>
+              </svg>
+            </div>
+          </div>
         </div>
 
         <div className="expanded-panel">
+          <header className="expanded-track-header">
+            <p className="expanded-track-kicker">Now playing locally</p>
+            <h1 title={trackDetail?.title}>{trackDetail?.title ?? "Nothing selected"}</h1>
+            {identityLabels.length > 0 ? (
+              <p className="expanded-track-identity">
+                {identityLabels.map((label, index) => (
+                  <span key={`${label}-${index}`}>{label}</span>
+                ))}
+              </p>
+            ) : null}
+            {stageLabels.length > 0 ? (
+              <div className="expanded-stage-meta" aria-label="Audio file summary">
+                {stageLabels.map((label, index) => (
+                  <span key={`${label}-${index}`}>{label}</span>
+                ))}
+              </div>
+            ) : null}
+          </header>
+
           <div className="expanded-tab-row" role="tablist" aria-label="Expanded player tabs">
-            {TABS.map((tab) => (
+            {TABS.map((tab, tabIndex) => (
               <button
                 key={tab.id}
+                id={`expanded-tab-${tab.id}`}
                 type="button"
                 role="tab"
                 aria-selected={activeTab === tab.id}
+                aria-controls={`expanded-panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
                 className={`expanded-tab ${activeTab === tab.id ? "active" : ""}`}
                 onClick={() => onTabChange(tab.id)}
+                onKeyDown={(event) => handleTabKeyDown(event, tabIndex)}
               >
                 {tab.label}
               </button>
             ))}
           </div>
 
-          <div className="expanded-panel-body">
+          <div
+            key={activeTab}
+            id={`expanded-panel-${activeTab}`}
+            className="expanded-panel-body"
+            role="tabpanel"
+            aria-labelledby={`expanded-tab-${activeTab}`}
+          >
             {activeTab === "queue" ? (
               queueCount === 0 ? (
                 <EmptyState
@@ -274,16 +373,8 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
               ) : lyrics.mode === "plain" ? (
                 <section
                   className="lyrics-stage"
-                  style={{
-                    ...streamerVars,
-                    "--streamer-play-state": isPlaying ? "running" : "paused"
-                  } as CSSProperties}
                 >
                   <div className="lyrics-stage-head">
-                    <div className="lyrics-stage-copy">
-                      <strong>{trackDetail?.title ?? "Lyrics"}</strong>
-                      <p>{trackDetail?.artist ?? "Local lyrics"}</p>
-                    </div>
                     <div className="lyrics-stage-toolbar">
                       {lyricsSource ? (
                         <span className="lyrics-stage-badge">{lyricsSource.toLowerCase()}</span>
@@ -300,16 +391,8 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
               ) : (
                 <section
                   className="lyrics-stage"
-                  style={{
-                    ...streamerVars,
-                    "--streamer-play-state": isPlaying ? "running" : "paused"
-                  } as CSSProperties}
                 >
                   <div className="lyrics-stage-head">
-                    <div className="lyrics-stage-copy">
-                      <strong>{trackDetail?.title ?? "Lyrics"}</strong>
-                      <p>{trackDetail?.artist ?? "Local lyrics"}</p>
-                    </div>
                     <div className="lyrics-stage-toolbar">
                       {lyricsHaveTranslations ? (
                         <button

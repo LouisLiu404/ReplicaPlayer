@@ -25,7 +25,7 @@ const ROOTS: LibraryRoot[] = [
 
 describe("NavigationRail", () => {
   it("shows Loading… for All folders until the aggregate count is ready", () => {
-    render(
+    const { container } = render(
       <NavigationRail
         activeView="library"
         roots={ROOTS}
@@ -38,6 +38,7 @@ describe("NavigationRail", () => {
 
     expect(screen.getByText("Loading…")).toBeTruthy();
     expect(screen.getByRole("button", { name: /All folders/i }).title).toBe("All folders");
+    expect(container.querySelector(".rail-topmark")).toBeNull();
   });
 
   it("keeps folder scope buttons clickable from the settings view", () => {

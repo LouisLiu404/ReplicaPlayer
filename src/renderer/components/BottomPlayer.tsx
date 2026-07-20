@@ -1,4 +1,4 @@
-import type { CSSProperties, PointerEvent } from "react";
+import type { CSSProperties, PointerEvent, RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { TrackDetail } from "../../shared/types";
@@ -36,6 +36,7 @@ interface BottomPlayerProps {
   onVolumeChange: (nextVolumePercent: number) => void;
   onCyclePlaybackMode: () => void;
   onTogglePanel: () => void;
+  panelExpandButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export function buildProgressTooltipLeft(leftPercent: number): string {
@@ -61,7 +62,8 @@ export function BottomPlayer({
   onSeek,
   onVolumeChange,
   onCyclePlaybackMode,
-  onTogglePanel
+  onTogglePanel,
+  panelExpandButtonRef
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
   const progressPercent = track ? Math.min(Math.max(currentTimeMs / totalDuration, 0), 1) : 0;
@@ -108,7 +110,7 @@ export function BottomPlayer({
 
   return (
     <footer
-      className={`bottom-player ${isSettingsView ? "settings-surface" : ""}`}
+      className={`bottom-player ${isSettingsView ? "settings-surface" : ""} ${isExpanded ? "expanded-surface" : ""}`}
       style={{
         "--player-progress": `${progressPercent * 100}%`,
         "--volume-progress": `${volumePercent}%`
@@ -216,6 +218,7 @@ export function BottomPlayer({
             </div>
 
             <button
+              ref={panelExpandButtonRef}
               type="button"
               className="panel-expand-button"
               onClick={onTogglePanel}

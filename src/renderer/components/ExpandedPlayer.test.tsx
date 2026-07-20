@@ -47,6 +47,42 @@ afterEach(() => {
 });
 
 describe("ExpandedPlayer lyrics header", () => {
+  it("presents local track identity and supports arrow-key tab navigation", () => {
+    const onTabChange = vi.fn();
+
+    const { container } = render(
+      <ExpandedPlayer
+        activeTab="lyrics"
+        selectedTrackId="track-1"
+        queueTracks={[]}
+        queueStartIndex={-1}
+        trackDetail={TRACK}
+        lyrics={SYNCED_TRANSLATED_LYRICS}
+        activeLyricLine={0}
+        streamerVars={DEFAULT_STREAMER_VARS}
+        isPlaying={true}
+        onSelectTrack={vi.fn()}
+        onTabChange={onTabChange}
+        setLyricRef={vi.fn()}
+        setLyricsScrollRef={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: TRACK.title })).toBeTruthy();
+    expect(screen.getByText(TRACK.artist)).toBeTruthy();
+    expect(screen.getByText(TRACK.album)).toBeTruthy();
+    expect(container.querySelector(".record-platter")).toBeTruthy();
+    expect(container.querySelector(".record-deck.is-playing")).toBeTruthy();
+    expect(container.querySelector(".tonearm-assembly")).toBeTruthy();
+    expect(
+      (container.querySelector(".expanded-player") as HTMLElement).style.getPropertyValue("--expanded-play-state")
+    ).toBe("running");
+
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Lyrics" }), { key: "ArrowRight" });
+
+    expect(onTabChange).toHaveBeenCalledWith("queue");
+  });
+
   it("shows an embed badge and lets translation lines be toggled", () => {
     render(
       <ExpandedPlayer
