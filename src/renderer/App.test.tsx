@@ -468,7 +468,7 @@ describe("App", () => {
     });
 
     const overlay = document.querySelector(".expanded-player-overlay");
-    expect(overlay?.parentElement?.classList.contains("app-workspace")).toBe(true);
+    expect(overlay?.parentElement?.classList.contains("app-shell")).toBe(true);
     expect(screen.getByRole("button", { name: "Collapse expanded player" })).toBeTruthy();
   });
 

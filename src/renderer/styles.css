@@ -183,6 +183,16 @@ img {
   -webkit-backdrop-filter: blur(26px) saturate(calc(128% + var(--window-glow-saturation-shift)));
   backdrop-filter: blur(26px) saturate(calc(128% + var(--window-glow-saturation-shift)));
   box-shadow: inset 0 -1px 0 var(--titlebar-edge);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.app-shell.player-overlay-mounted .window-drag-strip {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
 .window-collapse-button {
@@ -1231,13 +1241,16 @@ img {
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  padding: clamp(24px, 3vw, 44px) clamp(30px, 4vw, 68px) clamp(22px, 2.4vw, 36px);
+  padding:
+    calc(var(--window-drag-height) + clamp(24px, 3vw, 44px))
+    clamp(30px, 4vw, 68px)
+    clamp(22px, 2.4vw, 36px);
 }
 
 .expanded-player-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
+  position: fixed;
+  inset: 0 0 var(--player-height);
+  z-index: 20;
   isolation: isolate;
   opacity: 0;
   pointer-events: none;
@@ -1278,8 +1291,8 @@ img {
   z-index: 1;
 }
 
-.expanded-player-overlay.entering,
-.expanded-player-overlay.closing {
+.expanded-player-overlay.fallback-entering,
+.expanded-player-overlay.fallback-closing {
   opacity: 0;
   pointer-events: none;
   transform: translateY(86px) scale3d(0.96, 0.72, 1);
@@ -1287,12 +1300,87 @@ img {
   filter: blur(14px);
 }
 
+.expanded-player-overlay.capturing-open,
+.expanded-player-overlay.opening,
+.expanded-player-overlay.closing {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  clip-path: none;
+  filter: none;
+  transition: none;
+}
+
+.expanded-player-overlay.capturing-close,
 .expanded-player-overlay.open {
   opacity: 1;
-  pointer-events: auto;
+  pointer-events: none;
   transform: translateY(0) scale3d(1, 1, 1);
-  clip-path: inset(0 0 0 0 round 30px);
+  clip-path: none;
   filter: blur(0);
+}
+
+.expanded-player-overlay.open {
+  pointer-events: auto;
+}
+
+.magic-lamp-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.magic-lamp-canvas.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.magic-lamp-receiver {
+  position: fixed;
+  z-index: 29;
+  overflow: hidden;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.magic-lamp-receiver.visible {
+  visibility: visible;
+}
+
+.magic-lamp-receiver img,
+.magic-lamp-receiver-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.magic-lamp-receiver img {
+  object-fit: cover;
+}
+
+.magic-lamp-receiver-fallback {
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.magic-lamp-receiver-fallback svg {
+  width: 18px;
+  height: 18px;
 }
 
 .expanded-player-overlay .overlay-banner {
@@ -1463,7 +1551,7 @@ img {
 }
 
 .tonearm-pivot-ring {
-  fill: url("#tonearm-metal");
+  fill: #eef0ef;
   stroke: rgba(255, 255, 255, 0.74);
   stroke-width: 2;
 }
@@ -1487,7 +1575,7 @@ img {
 }
 
 .tonearm-rail {
-  stroke: url("#tonearm-metal");
+  stroke: #eef0ef;
   stroke-width: 10;
 }
 
@@ -1497,7 +1585,7 @@ img {
 }
 
 .tonearm-head rect {
-  fill: url("#tonearm-cartridge");
+  fill: #f3f4f2;
   stroke: rgba(255, 255, 255, 0.8);
   stroke-width: 1.5;
 }
@@ -3004,10 +3092,16 @@ img {
   }
 
   .expanded-player-overlay,
-  .expanded-player-overlay.entering,
+  .expanded-player-overlay.fallback-entering,
+  .expanded-player-overlay.fallback-closing,
   .expanded-player-overlay.closing,
   .expanded-player-overlay.open {
     transition: none;
+  }
+
+  .magic-lamp-canvas,
+  .magic-lamp-receiver {
+    display: none;
   }
 
   .record-platter,
@@ -3066,7 +3160,7 @@ img {
   }
 
   .expanded-player-view {
-    padding: 26px 40px 22px;
+    padding: calc(var(--window-drag-height) + 26px) 40px 22px;
   }
 
   .expanded-player-grid {
@@ -3077,7 +3171,8 @@ img {
 
 @media (max-height: 760px) {
   .expanded-player-view {
-    padding-block: 18px 14px;
+    padding-top: calc(var(--window-drag-height) + 18px);
+    padding-bottom: 14px;
   }
 
   .expanded-player-grid {

@@ -222,34 +222,87 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
             </div>
             <div className="record-tonearm" aria-hidden="true">
               <svg className="tonearm-assembly" viewBox="0 0 300 190" focusable="false">
-                <defs>
-                  <linearGradient id="tonearm-metal" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stopColor="#ffffff" />
-                    <stop offset="0.54" stopColor="#eef0ef" />
-                    <stop offset="1" stopColor="#b8bdc0" />
-                  </linearGradient>
-                  <linearGradient id="tonearm-cartridge" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="#ffffff" />
-                    <stop offset="1" stopColor="#d8dcdd" />
-                  </linearGradient>
-                </defs>
-                <circle className="tonearm-pivot-housing" cx="28" cy="28" r="27" />
-                <circle className="tonearm-pivot-ring" cx="28" cy="28" r="17" />
-                <circle className="tonearm-pivot-cap" cx="28" cy="28" r="7" />
+                <circle
+                  className="tonearm-pivot-housing"
+                  cx="28"
+                  cy="28"
+                  r="27"
+                  fill="rgba(0, 0, 0, 0.16)"
+                  stroke="rgba(255, 255, 255, 0.075)"
+                  strokeWidth="1.5"
+                />
+                <circle
+                  className="tonearm-pivot-ring"
+                  cx="28"
+                  cy="28"
+                  r="17"
+                  fill="#eef0ef"
+                  stroke="rgba(255, 255, 255, 0.74)"
+                  strokeWidth="2"
+                />
+                <circle
+                  className="tonearm-pivot-cap"
+                  cx="28"
+                  cy="28"
+                  r="7"
+                  fill="#d7dbdc"
+                />
                 <path
                   className="tonearm-rail-shadow"
                   d="M 31 31 C 73 70, 112 111, 158 134 C 187 149, 216 145, 246 151"
+                  fill="none"
+                  stroke="rgba(0, 0, 0, 0.26)"
+                  strokeWidth="13"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
                 <path
                   className="tonearm-rail"
                   d="M 31 31 C 73 70, 112 111, 158 134 C 187 149, 216 145, 246 151"
+                  fill="none"
+                  stroke="#eef0ef"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <path className="tonearm-collar" d="M 242 150 L 263 154" />
+                <path
+                  className="tonearm-collar"
+                  d="M 242 150 L 263 154"
+                  fill="none"
+                  stroke="#f5f6f3"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                />
                 <g className="tonearm-head" transform="translate(258 141) rotate(6)">
-                  <rect width="37" height="27" rx="5" />
-                  <path d="M 7 4 H 29" />
-                  <path d="M 7 9 H 29" />
-                  <path className="tonearm-stylus" d="M 30 23 L 35 30" />
+                  <rect
+                    width="37"
+                    height="27"
+                    rx="5"
+                    fill="#f3f4f2"
+                    stroke="rgba(255, 255, 255, 0.8)"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="M 7 4 H 29"
+                    fill="none"
+                    stroke="rgba(143, 149, 152, 0.32)"
+                    strokeLinecap="round"
+                    strokeWidth="1.2"
+                  />
+                  <path
+                    d="M 7 9 H 29"
+                    fill="none"
+                    stroke="rgba(143, 149, 152, 0.32)"
+                    strokeLinecap="round"
+                    strokeWidth="1.2"
+                  />
+                  <path
+                    className="tonearm-stylus"
+                    d="M 30 23 L 35 30"
+                    fill="none"
+                    stroke="rgba(245, 247, 250, 0.88)"
+                    strokeWidth="2"
+                  />
                 </g>
               </svg>
             </div>

@@ -36,6 +36,7 @@ interface BottomPlayerProps {
   onVolumeChange: (nextVolumePercent: number) => void;
   onCyclePlaybackMode: () => void;
   onTogglePanel: () => void;
+  playerArtButtonRef?: RefObject<HTMLButtonElement | null>;
   panelExpandButtonRef?: RefObject<HTMLButtonElement | null>;
 }
 
@@ -63,6 +64,7 @@ export function BottomPlayer({
   onVolumeChange,
   onCyclePlaybackMode,
   onTogglePanel,
+  playerArtButtonRef,
   panelExpandButtonRef
 }: BottomPlayerProps) {
   const totalDuration = Math.max(durationMs, track?.durationMs ?? 0, 1);
@@ -150,6 +152,7 @@ export function BottomPlayer({
         <div className="bottom-player-layout">
           <div className="bottom-player-current">
             <button
+              ref={playerArtButtonRef}
               type="button"
               className="bottom-player-art-button"
               onClick={onTogglePanel}

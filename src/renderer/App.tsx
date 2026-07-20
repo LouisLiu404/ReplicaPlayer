@@ -18,6 +18,10 @@ import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
 import { ChevronDownIcon } from "./components/icons";
 import { LibraryHero } from "./components/LibraryHero";
+import {
+  MagicLampTransition,
+  type MagicLampDirection
+} from "./components/MagicLampTransition";
 import { NavigationRail } from "./components/NavigationRail";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { SettingsView } from "./components/SettingsView";
@@ -65,8 +69,18 @@ type ManualScanModalState = {
   files: string[];
 };
 
-const EXPANDED_PLAYER_TRANSITION_MS = 280;
-type ExpandedPlayerPhase = "closed" | "entering" | "open" | "closing";
+const EXPANDED_PLAYER_FALLBACK_TRANSITION_MS = 280;
+const MAGIC_LAMP_EXPAND_MS = 500;
+const MAGIC_LAMP_COLLAPSE_MS = 460;
+type ExpandedPlayerPhase =
+  | "closed"
+  | "capturing-open"
+  | "opening"
+  | "open"
+  | "capturing-close"
+  | "closing"
+  | "fallback-entering"
+  | "fallback-closing";
 
 function toScanFileLabel(filePath: string): string {
   const segments = filePath.split(/[/\\]/);
@@ -109,6 +123,8 @@ export function App() {
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const expandedPlayerOverlayRef = useRef<HTMLDivElement | null>(null);
+  const playerArtButtonRef = useRef<HTMLButtonElement | null>(null);
   const panelExpandButtonRef = useRef<HTMLButtonElement | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
   const trackQueryCacheRef = useRef(new LruCache<string, TrackListItem[]>(32));
@@ -149,13 +165,17 @@ export function App() {
   const deferredSearch = useDeferredValue(search);
 
   const collapseExpandedPlayer = useCallback((restoreFocus = false): void => {
+    if (expandedPlayerPhase !== "open") {
+      return;
+    }
+
     setIsPlayerExpanded(false);
     if (restoreFocus) {
       window.requestAnimationFrame(() => {
         panelExpandButtonRef.current?.focus();
       });
     }
-  }, []);
+  }, [expandedPlayerPhase]);
 
   activePanelTabRef.current = activePanelTab;
 
@@ -377,28 +397,54 @@ export function App() {
     }
   }, [activeView]);
 
-  // Expanded player enter/exit animation
+  // Keep the expanded player mounted while its snapshot is captured and animated.
+  useEffect(() => {
+    if (isPlayerExpanded) {
+      setRenderExpandedPlayer(true);
+      setExpandedPlayerPhase((current) => {
+        if (
+          current === "capturing-open" ||
+          current === "opening" ||
+          current === "open" ||
+          current === "fallback-entering"
+        ) {
+          return current;
+        }
+        return "capturing-open";
+      });
+    } else if (renderExpandedPlayer) {
+      setExpandedPlayerPhase((current) => {
+        if (
+          current === "capturing-close" ||
+          current === "closing" ||
+          current === "fallback-closing"
+        ) {
+          return current;
+        }
+        return "capturing-close";
+      });
+    } else {
+      setExpandedPlayerPhase("closed");
+    }
+  }, [isPlayerExpanded, renderExpandedPlayer]);
+
+  // CSS fallback for reduced motion, capture failures, and unavailable WebGL.
   useEffect(() => {
     let frameA = 0;
     let frameB = 0;
     let timeoutId = 0;
 
-    if (isPlayerExpanded) {
-      setRenderExpandedPlayer(true);
-      setExpandedPlayerPhase("entering");
+    if (expandedPlayerPhase === "fallback-entering") {
       frameA = window.requestAnimationFrame(() => {
         frameB = window.requestAnimationFrame(() => {
           setExpandedPlayerPhase("open");
         });
       });
-    } else if (renderExpandedPlayer) {
-      setExpandedPlayerPhase("closing");
+    } else if (expandedPlayerPhase === "fallback-closing") {
       timeoutId = window.setTimeout(() => {
         setRenderExpandedPlayer(false);
         setExpandedPlayerPhase("closed");
-      }, EXPANDED_PLAYER_TRANSITION_MS);
-    } else {
-      setExpandedPlayerPhase("closed");
+      }, EXPANDED_PLAYER_FALLBACK_TRANSITION_MS);
     }
 
     return () => {
@@ -406,17 +452,7 @@ export function App() {
       window.cancelAnimationFrame(frameB);
       window.clearTimeout(timeoutId);
     };
-  }, [isPlayerExpanded, renderExpandedPlayer]);
-
-  useEffect(() => {
-    if (isPlayerExpanded) {
-      return;
-    }
-
-    if (!renderExpandedPlayer && expandedPlayerPhase !== "closed") {
-      setExpandedPlayerPhase("closed");
-    }
-  }, [expandedPlayerPhase, isPlayerExpanded, renderExpandedPlayer]);
+  }, [expandedPlayerPhase]);
 
   // Scan progress listener
   useEffect(() => {
@@ -803,6 +839,10 @@ export function App() {
   }, []);
 
   const handleTogglePanel = useCallback((): void => {
+    if (expandedPlayerPhase !== "closed" && expandedPlayerPhase !== "open") {
+      return;
+    }
+
     if (!isPlayerExpanded) {
       setActivePanelTab(defaultExpandedTab);
       setIsPlayerExpanded(true);
@@ -810,7 +850,7 @@ export function App() {
     }
 
     collapseExpandedPlayer(true);
-  }, [collapseExpandedPlayer, defaultExpandedTab, isPlayerExpanded]);
+  }, [collapseExpandedPlayer, defaultExpandedTab, expandedPlayerPhase, isPlayerExpanded]);
 
   const handleSetLyricRef = useCallback((index: number, element: HTMLDivElement | null): void => {
     lyricRefs.current.set(index, element);
@@ -869,6 +909,24 @@ export function App() {
     }));
   }, []);
 
+  const handleMagicLampReady = useCallback((direction: MagicLampDirection): void => {
+    setExpandedPlayerPhase(direction === "expand" ? "opening" : "closing");
+  }, []);
+
+  const handleMagicLampComplete = useCallback((direction: MagicLampDirection): void => {
+    if (direction === "expand") {
+      setExpandedPlayerPhase("open");
+      return;
+    }
+
+    setRenderExpandedPlayer(false);
+    setExpandedPlayerPhase("closed");
+  }, []);
+
+  const handleMagicLampFallback = useCallback((direction: MagicLampDirection): void => {
+    setExpandedPlayerPhase(direction === "expand" ? "fallback-entering" : "fallback-closing");
+  }, []);
+
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
   const selectedMissingTrack = trackDetail?.availability === "missing"
@@ -876,11 +934,20 @@ export function App() {
     : availabilityFilter === "missing"
       ? visibleTracks.find((track) => track.availability === "missing") ?? null
       : null;
+  const magicLampDirection: MagicLampDirection | null =
+    expandedPlayerPhase === "capturing-open" || expandedPlayerPhase === "opening"
+      ? "expand"
+      : expandedPlayerPhase === "capturing-close" || expandedPlayerPhase === "closing"
+        ? "collapse"
+        : null;
+  const magicLampDurationMs = magicLampDirection === "collapse"
+    ? MAGIC_LAMP_COLLAPSE_MS
+    : MAGIC_LAMP_EXPAND_MS;
 
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"}`}
+      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"} ${renderExpandedPlayer ? "player-overlay-mounted" : ""}`}
     >
       <audio ref={audioRef} />
       <ScanProgressModal
@@ -1004,33 +1071,47 @@ export function App() {
           </main>
         </div>
 
-        {renderExpandedPlayer ? (
-          <div
-            className={`expanded-player-overlay ${expandedPlayerPhase}`}
-            style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_TRANSITION_MS}ms` } as CSSProperties}
-          >
-            {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
-            {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
-            <div className="expanded-player-view">
-              <ExpandedPlayer
-                activeTab={activePanelTab}
-                selectedTrackId={selectedTrackId}
-                queueTracks={visibleTracks}
-                queueStartIndex={selectedTrackIndex}
-                trackDetail={trackDetail}
-                lyrics={lyrics}
-                activeLyricLine={activeLyricLine}
-                streamerVars={streamerVars}
-                isPlaying={isPlaying}
-                onSelectTrack={setSelectedTrackId}
-                onTabChange={handlePanelTabChange}
-                setLyricRef={handleSetLyricRef}
-                setLyricsScrollRef={handleSetLyricsScrollRef}
-              />
-            </div>
-          </div>
-        ) : null}
       </div>
+
+      {renderExpandedPlayer ? (
+        <div
+          ref={expandedPlayerOverlayRef}
+          className={`expanded-player-overlay ${expandedPlayerPhase}`}
+          style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_FALLBACK_TRANSITION_MS}ms` } as CSSProperties}
+        >
+          {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
+          {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
+          <div className="expanded-player-view">
+            <ExpandedPlayer
+              activeTab={activePanelTab}
+              selectedTrackId={selectedTrackId}
+              queueTracks={visibleTracks}
+              queueStartIndex={selectedTrackIndex}
+              trackDetail={trackDetail}
+              lyrics={lyrics}
+              activeLyricLine={activeLyricLine}
+              streamerVars={streamerVars}
+              isPlaying={isPlaying}
+              onSelectTrack={setSelectedTrackId}
+              onTabChange={handlePanelTabChange}
+              setLyricRef={handleSetLyricRef}
+              setLyricsScrollRef={handleSetLyricsScrollRef}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <MagicLampTransition
+        direction={magicLampDirection}
+        sourceRef={expandedPlayerOverlayRef}
+        targetRef={playerArtButtonRef}
+        artworkUrl={trackDetail?.artworkUrl}
+        artworkAlt={trackDetail?.title ?? "Current track artwork"}
+        durationMs={magicLampDurationMs}
+        onReady={handleMagicLampReady}
+        onComplete={handleMagicLampComplete}
+        onFallback={handleMagicLampFallback}
+      />
 
       <BottomPlayer
         track={trackDetail}
@@ -1064,6 +1145,7 @@ export function App() {
         onVolumeChange={handleVolumeChange}
         onCyclePlaybackMode={handleCyclePlaybackMode}
         onTogglePanel={handleTogglePanel}
+        playerArtButtonRef={playerArtButtonRef}
         panelExpandButtonRef={panelExpandButtonRef}
       />
     </div>
