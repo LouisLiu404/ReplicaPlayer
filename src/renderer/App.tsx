@@ -154,7 +154,14 @@ export function App() {
   );
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [renderExpandedPlayer, setRenderExpandedPlayer] = useState(false);
+  const [preloadExpandedPlayer, setPreloadExpandedPlayer] = useState(false);
+  const [windowSnapshotRevision, setWindowSnapshotRevision] = useState(0);
   const [expandedPlayerPhase, setExpandedPlayerPhase] = useState<ExpandedPlayerPhase>("closed");
+  const isMagicLampAnimating =
+    expandedPlayerPhase === "capturing-open" ||
+    expandedPlayerPhase === "opening" ||
+    expandedPlayerPhase === "capturing-close" ||
+    expandedPlayerPhase === "closing";
   const [scanModal, setScanModal] = useState<ManualScanModalState | null>(null);
   const [streamerVars, setStreamerVars] = useState<StreamerVars>(DEFAULT_STREAMER_VARS);
   const [visualEffects, setVisualEffects] = useState(() =>
@@ -225,7 +232,58 @@ export function App() {
     setPlaybackError
   } = useAudioPlayback(visibleTracks, chooseRandomTrack, handleTrackNotFound);
 
-  useVisualizer(audioRef, appShellRef, true);
+  useVisualizer(audioRef, appShellRef, true, isMagicLampAnimating);
+
+  const lyricSnapshotRevision = lyrics.mode === "synced"
+    ? `${lyrics.source}:${lyrics.lines.length}:${lyrics.lines.at(-1)?.startMs ?? 0}`
+    : lyrics.mode === "plain"
+      ? `${lyrics.source}:${lyrics.text.length}`
+      : "none";
+  const queueSnapshotRevision = activePanelTab === "queue"
+    ? visibleTracks.map((track) => track.id).join(",")
+    : "";
+  const streamerSnapshotRevision = Object.values(streamerVars).join(":");
+  const magicLampSnapshotKey = trackDetail
+    ? [
+        trackDetail.id,
+        trackDetail.artworkUrl ?? "",
+        activePanelTab,
+        lyricSnapshotRevision,
+        queueSnapshotRevision,
+        streamerSnapshotRevision,
+        visualEffects.mainBackground,
+        visualEffects.playerGlow,
+        windowSnapshotRevision
+      ].join(":")
+    : "";
+
+  useEffect(() => {
+    if (
+      magicLampSnapshotKey &&
+      !isLoadingLibrary &&
+      activeView !== "settings" &&
+      expandedPlayerPhase === "closed"
+    ) {
+      setPreloadExpandedPlayer(true);
+    }
+  }, [
+    activeView,
+    expandedPlayerPhase,
+    isLoadingLibrary,
+    magicLampSnapshotKey
+  ]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSnapshotRevision((current) => current + 1);
+      if (expandedPlayerPhase === "closed" && magicLampSnapshotKey) {
+        setPreloadExpandedPlayer(true);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [expandedPlayerPhase, magicLampSnapshotKey]);
 
   useEffect(() => {
     const handleWindowFocus = () => setIsWindowActive(true);
@@ -399,6 +457,7 @@ export function App() {
   // Keep the expanded player mounted while its snapshot is captured and animated.
   useEffect(() => {
     if (isPlayerExpanded) {
+      setPreloadExpandedPlayer(false);
       setRenderExpandedPlayer(true);
       setExpandedPlayerPhase((current) => {
         if (
@@ -691,7 +750,11 @@ export function App() {
 
   // Auto-scroll lyrics
   useEffect(() => {
-    if (!isPlayerExpanded || activePanelTab !== "lyrics" || activeLyricLine < 0) {
+    if (
+      (!isPlayerExpanded && !preloadExpandedPlayer) ||
+      activePanelTab !== "lyrics" ||
+      activeLyricLine < 0
+    ) {
       return;
     }
 
@@ -700,7 +763,7 @@ export function App() {
     if (scrollContainer && activeElement) {
       scrollLyricsContainer(scrollContainer, activeElement);
     }
-  }, [activeLyricLine, activePanelTab, isPlayerExpanded]);
+  }, [activeLyricLine, activePanelTab, isPlayerExpanded, preloadExpandedPlayer]);
 
   // Clear lyric refs on track change
   useEffect(() => {
@@ -928,6 +991,10 @@ export function App() {
     setExpandedPlayerPhase(direction === "expand" ? "fallback-entering" : "fallback-closing");
   }, []);
 
+  const handleMagicLampPreloadComplete = useCallback((): void => {
+    setPreloadExpandedPlayer(false);
+  }, []);
+
   const canPlaySelectedTrack = trackDetail?.availability === "available";
   const isSettingsView = activeView === "settings" && !isPlayerExpanded;
   const selectedMissingTrack = trackDetail?.availability === "missing"
@@ -948,7 +1015,7 @@ export function App() {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"} ${renderExpandedPlayer ? "player-overlay-mounted" : ""}`}
+      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"} ${renderExpandedPlayer ? "player-overlay-mounted" : ""} ${isMagicLampAnimating ? "magic-lamp-active" : ""}`}
     >
       <audio ref={audioRef} />
       <ScanProgressModal
@@ -1074,11 +1141,16 @@ export function App() {
 
       </div>
 
-      {renderExpandedPlayer ? (
+      {renderExpandedPlayer || preloadExpandedPlayer ? (
         <div
           ref={expandedPlayerOverlayRef}
-          className={`expanded-player-overlay ${expandedPlayerPhase}`}
-          style={{ "--expanded-player-transition-ms": `${EXPANDED_PLAYER_FALLBACK_TRANSITION_MS}ms` } as CSSProperties}
+          className={`expanded-player-overlay ${expandedPlayerPhase} ${preloadExpandedPlayer ? "magic-lamp-preload-source" : ""}`}
+          aria-hidden={!isPlayerExpanded}
+          inert={!isPlayerExpanded}
+          style={{
+            "--expanded-player-transition-ms": `${EXPANDED_PLAYER_FALLBACK_TRANSITION_MS}ms`,
+            "--player-glow-enabled": visualEffects.playerGlow ? "1" : "0"
+          } as CSSProperties}
         >
           {libraryError ? <div className="error-banner overlay-banner">{libraryError}</div> : null}
           {playbackError ? <div className="error-banner overlay-banner">{playbackError}</div> : null}
@@ -1109,6 +1181,9 @@ export function App() {
         artworkUrl={trackDetail?.artworkUrl}
         artworkAlt={trackDetail?.title ?? "Current track artwork"}
         durationMs={magicLampDurationMs}
+        snapshotKey={magicLampSnapshotKey}
+        preloadSnapshot={preloadExpandedPlayer || expandedPlayerPhase === "open"}
+        onPreloadComplete={handleMagicLampPreloadComplete}
         onReady={handleMagicLampReady}
         onComplete={handleMagicLampComplete}
         onFallback={handleMagicLampFallback}

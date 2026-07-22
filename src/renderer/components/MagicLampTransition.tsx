@@ -8,6 +8,7 @@ import {
   MAGIC_LAMP_NECK_SPLIT,
   receiverOpacity
 } from "../magic-lamp";
+import { createMagicLampCaptureSource } from "../magic-lamp-snapshot";
 import { DiscIcon } from "./icons";
 
 export type MagicLampDirection = "expand" | "collapse";
@@ -19,14 +20,37 @@ interface MagicLampTransitionProps {
   artworkUrl?: string;
   artworkAlt: string;
   durationMs: number;
+  snapshotKey: string;
+  preloadSnapshot: boolean;
+  onPreloadComplete: () => void;
   onReady: (direction: MagicLampDirection) => void;
   onComplete: (direction: MagicLampDirection) => void;
   onFallback: (direction: MagicLampDirection) => void;
 }
 
 interface MagicLampRenderer {
+  prepare: (
+    snapshot: TexImageSource,
+    sourceRect: DOMRect,
+    targetRect: DOMRect
+  ) => void;
   draw: (progress: number) => void;
+  finishPreparation: () => void;
   dispose: () => void;
+}
+
+interface CachedSnapshot {
+  key: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  source: TexImageSource;
+}
+
+interface PendingSnapshot {
+  key: string;
+  promise: Promise<TexImageSource | null>;
 }
 
 const VERTEX_SHADER = `
@@ -164,21 +188,14 @@ function createBuffer(
 }
 
 function createRenderer(
-  canvas: HTMLCanvasElement,
-  snapshot: HTMLCanvasElement,
-  sourceRect: DOMRect,
-  targetRect: DOMRect
+  canvas: HTMLCanvasElement
 ): MagicLampRenderer {
-  const pixelRatio = 1;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  canvas.width = Math.max(Math.round(viewportWidth * pixelRatio), 1);
-  canvas.height = Math.max(Math.round(viewportHeight * pixelRatio), 1);
+  canvas.width = 1;
+  canvas.height = 1;
 
   const gl = canvas.getContext("webgl", {
     alpha: true,
     antialias: false,
-    desynchronized: true,
     powerPreference: "high-performance",
     premultipliedAlpha: true,
     preserveDrawingBuffer: false
@@ -222,7 +239,17 @@ function createRenderer(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, snapshot);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([0, 0, 0, 0])
+  );
 
   const positionLocation = requireAttribute(gl, program, "a_position");
   const textureCoordinateLocation = requireAttribute(gl, program, "a_texture_coordinate");
@@ -234,7 +261,6 @@ function createRenderer(
   gl.useProgram(program);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.viewport(0, 0, canvas.width, canvas.height);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
   gl.enableVertexAttribArray(positionLocation);
@@ -243,29 +269,57 @@ function createRenderer(
   gl.enableVertexAttribArray(textureCoordinateLocation);
   gl.vertexAttribPointer(textureCoordinateLocation, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-  gl.uniform4f(
-    sourceRectLocation,
-    sourceRect.left,
-    sourceRect.top,
-    sourceRect.width,
-    sourceRect.height
-  );
-  gl.uniform4f(
-    targetRectLocation,
-    targetRect.left,
-    targetRect.top,
-    targetRect.width,
-    targetRect.height
-  );
-  gl.uniform2f(viewportLocation, viewportWidth, viewportHeight);
   gl.uniform1i(requireUniform(gl, program, "u_texture"), 0);
+  gl.uniform4f(sourceRectLocation, 0, 0, 1, 1);
+  gl.uniform4f(targetRectLocation, 0, 0, 1, 1);
+  gl.uniform2f(viewportLocation, 1, 1);
+  gl.uniform1f(progressLocation, 0);
+  gl.viewport(0, 0, 1, 1);
+  gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
 
   return {
+    prepare: (snapshot, sourceRect, targetRect) => {
+      if (gl.isContextLost()) {
+        throw new Error("Magic lamp WebGL context was lost");
+      }
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const outputWidth = Math.max(Math.round(viewportWidth), 1);
+      const outputHeight = Math.max(Math.round(viewportHeight), 1);
+      if (canvas.width !== outputWidth || canvas.height !== outputHeight) {
+        canvas.width = outputWidth;
+        canvas.height = outputHeight;
+      }
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, snapshot);
+      gl.uniform4f(
+        sourceRectLocation,
+        sourceRect.left,
+        sourceRect.top,
+        sourceRect.width,
+        sourceRect.height
+      );
+      gl.uniform4f(
+        targetRectLocation,
+        targetRect.left,
+        targetRect.top,
+        targetRect.width,
+        targetRect.height
+      );
+      gl.uniform2f(viewportLocation, viewportWidth, viewportHeight);
+    },
     draw: (progress) => {
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform1f(progressLocation, progress);
       gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
+    },
+    finishPreparation: () => {
+      gl.finish();
     },
     dispose: () => {
       gl.deleteTexture(texture);
@@ -279,6 +333,51 @@ function createRenderer(
   };
 }
 
+async function captureMagicLampSnapshot(
+  source: HTMLDivElement,
+  sourceRect: DOMRect
+): Promise<TexImageSource> {
+  const captureSource = createMagicLampCaptureSource(source, sourceRect);
+
+  try {
+    const canvas = await toCanvas(captureSource.node, {
+      backgroundColor: "#08090b",
+      cacheBust: false,
+      pixelRatio: 1,
+      skipFonts: true,
+      width: sourceRect.width,
+      height: sourceRect.height,
+      style: {
+        opacity: "1",
+        transform: "none",
+        filter: "none",
+        clipPath: "none",
+        pointerEvents: "none"
+      }
+    });
+    const context = canvas.getContext("2d");
+    return context?.getImageData(0, 0, canvas.width, canvas.height) ?? canvas;
+  } finally {
+    captureSource.dispose();
+  }
+}
+
+function snapshotMatches(
+  snapshot: CachedSnapshot,
+  key: string,
+  sourceRect: DOMRect
+): boolean {
+  return snapshot.key === key &&
+    Math.abs(snapshot.sourceWidth - sourceRect.width) < 0.5 &&
+    Math.abs(snapshot.sourceHeight - sourceRect.height) < 0.5 &&
+    snapshot.viewportWidth === window.innerWidth &&
+    snapshot.viewportHeight === window.innerHeight;
+}
+
+function isImageBitmap(source: TexImageSource): source is ImageBitmap {
+  return typeof window.ImageBitmap !== "undefined" && source instanceof window.ImageBitmap;
+}
+
 export function MagicLampTransition({
   direction,
   sourceRef,
@@ -286,12 +385,155 @@ export function MagicLampTransition({
   artworkUrl,
   artworkAlt,
   durationMs,
+  snapshotKey,
+  preloadSnapshot,
+  onPreloadComplete,
   onReady,
   onComplete,
   onFallback
 }: MagicLampTransitionProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const receiverRef = useRef<HTMLDivElement | null>(null);
+  const rendererRef = useRef<MagicLampRenderer | null>(null);
+  const snapshotCacheRef = useRef<CachedSnapshot | null>(null);
+  const pendingSnapshotRef = useRef<PendingSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let idleCallback = 0;
+    let fallbackTimeout = 0;
+
+    const warmRenderer = () => {
+      if (
+        cancelled ||
+        rendererRef.current ||
+        !canvasRef.current ||
+        typeof window.WebGLRenderingContext === "undefined"
+      ) {
+        return;
+      }
+
+      try {
+        rendererRef.current = createRenderer(canvasRef.current);
+      } catch {
+        // The transition effect will use the existing CSS fallback if WebGL
+        // remains unavailable when the user opens the player.
+      }
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleCallback = window.requestIdleCallback(warmRenderer);
+    } else {
+      fallbackTimeout = window.setTimeout(warmRenderer, 120);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleCallback) {
+        window.cancelIdleCallback(idleCallback);
+      }
+      window.clearTimeout(fallbackTimeout);
+      rendererRef.current?.dispose();
+      rendererRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (snapshotCacheRef.current?.key !== snapshotKey) {
+      snapshotCacheRef.current = null;
+    }
+  }, [snapshotKey]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      snapshotCacheRef.current = null;
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!preloadSnapshot || direction || !snapshotKey) {
+      return;
+    }
+
+    if (typeof window.WebGLRenderingContext === "undefined") {
+      onPreloadComplete();
+      return;
+    }
+
+    let cancelled = false;
+    let idleCallback = 0;
+    let fallbackTimeout = 0;
+
+    const preload = () => {
+      const source = sourceRef.current;
+      if (!source || cancelled) {
+        return;
+      }
+
+      const sourceRect = source.getBoundingClientRect();
+      if (sourceRect.width < 1 || sourceRect.height < 1) {
+        onPreloadComplete();
+        return;
+      }
+
+      const cached = snapshotCacheRef.current;
+      if (cached && snapshotMatches(cached, snapshotKey, sourceRect)) {
+        onPreloadComplete();
+        return;
+      }
+
+      const promise = captureMagicLampSnapshot(source, sourceRect)
+        .then((snapshotSource) => {
+          if (!cancelled) {
+            snapshotCacheRef.current = {
+              key: snapshotKey,
+              sourceWidth: sourceRect.width,
+              sourceHeight: sourceRect.height,
+              viewportWidth: window.innerWidth,
+              viewportHeight: window.innerHeight,
+              source: snapshotSource
+            };
+          }
+          return snapshotSource;
+        })
+        .catch(() => null)
+        .finally(() => {
+          if (pendingSnapshotRef.current?.promise === promise) {
+            pendingSnapshotRef.current = null;
+          }
+        });
+
+      pendingSnapshotRef.current = { key: snapshotKey, promise };
+      void promise.then(() => {
+        if (!cancelled) {
+          onPreloadComplete();
+        }
+      });
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleCallback = window.requestIdleCallback(preload);
+    } else {
+      fallbackTimeout = window.setTimeout(preload, 180);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleCallback) {
+        window.cancelIdleCallback(idleCallback);
+      }
+      window.clearTimeout(fallbackTimeout);
+    };
+  }, [
+    direction,
+    onPreloadComplete,
+    preloadSnapshot,
+    snapshotKey,
+    sourceRef
+  ]);
 
   useEffect(() => {
     if (!direction) {
@@ -300,7 +542,6 @@ export function MagicLampTransition({
 
     let cancelled = false;
     let animationFrame = 0;
-    let renderer: MagicLampRenderer | null = null;
     let sourceNode: HTMLDivElement | null = null;
     let fallbackSent = false;
 
@@ -345,26 +586,53 @@ export function MagicLampTransition({
       }
 
       try {
-        const snapshot = await toCanvas(source, {
-          backgroundColor: "#08090b",
-          cacheBust: false,
-          pixelRatio: 1,
-          skipFonts: true,
-          width: sourceRect.width,
-          height: sourceRect.height,
-          style: {
-            opacity: "1",
-            transform: "none",
-            filter: "none",
-            clipPath: "none",
-            pointerEvents: "none"
-          }
-        });
+        const cached = snapshotCacheRef.current;
+        const pending = pendingSnapshotRef.current;
+        const snapshot = cached && snapshotMatches(
+          cached,
+          snapshotKey,
+          sourceRect
+        )
+          ? cached.source
+          : pending?.key === snapshotKey
+            ? await pending.promise
+            : await captureMagicLampSnapshot(source, sourceRect);
+        if (!snapshot) {
+          useFallback();
+          return;
+        }
         if (cancelled) {
           return;
         }
 
-        renderer = createRenderer(output, snapshot, sourceRect, targetRect);
+        const textureSource = typeof window.createImageBitmap === "function"
+          ? await window.createImageBitmap(snapshot)
+          : snapshot;
+        if (cancelled) {
+          if (isImageBitmap(textureSource)) {
+            textureSource.close();
+          }
+          return;
+        }
+
+        snapshotCacheRef.current = {
+          key: snapshotKey,
+          sourceWidth: sourceRect.width,
+          sourceHeight: sourceRect.height,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          source: snapshot
+        };
+
+        const renderer = rendererRef.current ?? createRenderer(output);
+        rendererRef.current = renderer;
+        try {
+          renderer.prepare(textureSource, sourceRect, targetRect);
+        } finally {
+          if (isImageBitmap(textureSource)) {
+            textureSource.close();
+          }
+        }
         receiver.style.left = `${targetRect.left}px`;
         receiver.style.top = `${targetRect.top}px`;
         receiver.style.width = `${targetRect.width}px`;
@@ -372,14 +640,15 @@ export function MagicLampTransition({
 
         const initialProgress = direction === "collapse" ? 0 : 1;
         renderer.draw(initialProgress);
+        renderer.finishPreparation();
         output.classList.add("visible");
         receiver.classList.add("visible");
         receiver.style.opacity = `${receiverOpacity(direction, 0)}`;
         onReady(direction);
 
-        const startedAt = performance.now();
+        let startedAt = 0;
         const tick = (now: number) => {
-          if (cancelled || !renderer) {
+          if (cancelled) {
             return;
           }
 
@@ -402,8 +671,17 @@ export function MagicLampTransition({
           animationFrame = window.requestAnimationFrame(tick);
         };
 
-        animationFrame = window.requestAnimationFrame(tick);
+        animationFrame = window.requestAnimationFrame((now) => {
+          if (cancelled) {
+            return;
+          }
+
+          startedAt = now;
+          animationFrame = window.requestAnimationFrame(tick);
+        });
       } catch {
+        rendererRef.current?.dispose();
+        rendererRef.current = null;
         useFallback();
       }
     };
@@ -413,12 +691,11 @@ export function MagicLampTransition({
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(animationFrame);
-      renderer?.dispose();
       sourceNode?.style.removeProperty("opacity");
       canvasRef.current?.classList.remove("visible");
       receiverRef.current?.classList.remove("visible");
     };
-  }, [direction, durationMs, onComplete, onFallback, onReady, sourceRef, targetRef]);
+  }, [direction, durationMs, onComplete, onFallback, onReady, snapshotKey, sourceRef, targetRef]);
 
   return (
     <>

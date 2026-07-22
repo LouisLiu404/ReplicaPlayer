@@ -5,7 +5,8 @@ import { calculatePulseLevel, smoothPulse } from "./visualizer";
 export function useVisualizer(
   audioRef: React.RefObject<HTMLAudioElement | null>,
   appShellRef: React.RefObject<HTMLDivElement | null>,
-  enabled: boolean
+  enabled: boolean,
+  suspendVisualUpdates = false
 ): void {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -14,6 +15,9 @@ export function useVisualizer(
   const pulseFrameRef = useRef<number | null>(null);
   const mainPulseRef = useRef(0);
   const playerPulseRef = useRef(0);
+  const suspendVisualUpdatesRef = useRef(suspendVisualUpdates);
+
+  suspendVisualUpdatesRef.current = suspendVisualUpdates;
 
   useEffect(() => {
     if (!enabled) {
@@ -68,6 +72,11 @@ export function useVisualizer(
 
     const tick = () => {
       pulseFrameRef.current = null;
+
+      if (suspendVisualUpdatesRef.current) {
+        pulseFrameRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
 
       const analyser = analyserRef.current;
       const data = analyserDataRef.current;

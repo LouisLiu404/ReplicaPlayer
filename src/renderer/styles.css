@@ -160,6 +160,27 @@ img {
     transform 140ms ease;
 }
 
+.app-shell.magic-lamp-active::before,
+.app-shell.magic-lamp-active .expanded-player-overlay::before,
+.app-shell.magic-lamp-active .expanded-player-overlay::after,
+.app-shell.magic-lamp-active .bottom-player-surface::before {
+  transition: none;
+}
+
+.app-shell.magic-lamp-active .expanded-player-overlay::after,
+.app-shell.magic-lamp-active .bottom-player-surface::before {
+  animation-play-state: paused;
+}
+
+.app-shell.magic-lamp-active::before,
+.app-shell.magic-lamp-active .expanded-player-overlay::before,
+.app-shell.magic-lamp-active .expanded-player-overlay::after,
+.app-shell.magic-lamp-active .bottom-player-surface::before {
+  opacity: 0;
+  filter: none;
+  mix-blend-mode: normal;
+}
+
 .app-shell.window-inactive {
   --window-glow-activity: 0.78;
   --window-glow-saturation-shift: -24%;
@@ -1329,6 +1350,15 @@ img {
 .expanded-player-overlay.capturing-open,
 .expanded-player-overlay.opening,
 .expanded-player-overlay.closing {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  clip-path: none;
+  filter: none;
+  transition: none;
+}
+
+.expanded-player-overlay.magic-lamp-preload-source {
   opacity: 0;
   pointer-events: none;
   transform: none;
