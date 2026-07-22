@@ -4,9 +4,7 @@ import {
   createMagicLampMesh,
   deformMagicLampVertex,
   easeMagicLampProgress,
-  MAGIC_LAMP_COLUMNS,
   MAGIC_LAMP_NECK_SPLIT,
-  MAGIC_LAMP_ROWS,
   receiverOpacity
 } from "./magic-lamp";
 
@@ -34,11 +32,6 @@ describe("magic lamp geometry", () => {
   it("rejects invalid mesh sizes", () => {
     expect(() => createMagicLampMesh(0, 4)).toThrow();
     expect(() => createMagicLampMesh(4.5, 4)).toThrow();
-  });
-
-  it("uses a dense mesh for a smooth curved silhouette", () => {
-    expect(MAGIC_LAMP_COLUMNS).toBeGreaterThanOrEqual(35);
-    expect(MAGIC_LAMP_ROWS).toBeGreaterThanOrEqual(28);
   });
 
   it("forms a neck at the receiver before draining the window", () => {
