@@ -9,11 +9,7 @@ import {
 } from "react";
 
 import type { LyricPayload, TrackDetail, TrackListItem } from "../../shared/types";
-import {
-  hasLyricTranslations,
-  lyricSourceBadge,
-  splitLyricDisplayParts
-} from "../lyrics-display";
+import { splitLyricDisplayParts } from "../lyrics-display";
 import type { StreamerVars } from "../streamer";
 import { calculateVirtualWindow, type VirtualWindow } from "../virtual-list";
 import {
@@ -35,6 +31,7 @@ interface ExpandedPlayerProps {
   trackDetail: TrackDetail | null;
   lyrics: LyricPayload;
   activeLyricLine: number;
+  showLyricTranslations: boolean;
   streamerVars: StreamerVars;
   isPlaying: boolean;
   onSelectTrack: (trackId: string) => void;
@@ -60,6 +57,7 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
   trackDetail,
   lyrics,
   activeLyricLine,
+  showLyricTranslations,
   streamerVars,
   isPlaying,
   onSelectTrack,
@@ -70,7 +68,6 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
   const queueScrollRef = useRef<HTMLDivElement | null>(null);
   const queueBaseIndex = queueStartIndex >= 0 ? queueStartIndex : -1;
   const queueCount = queueBaseIndex >= 0 ? Math.max(0, queueTracks.length - queueBaseIndex) : 0;
-  const [showLyricTranslations, setShowLyricTranslations] = useState(true);
   const [queueWindow, setQueueWindow] = useState<VirtualWindow>(() =>
     calculateVirtualWindow({
       itemCount: queueCount,
@@ -157,8 +154,6 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
     ? [trackDetail.artist, trackDetail.album, trackDetail.year?.toString()]
         .filter((value): value is string => Boolean(value))
     : [];
-  const lyricsHaveTranslations = useMemo(() => hasLyricTranslations(lyrics), [lyrics]);
-  const lyricsSource = useMemo(() => lyricSourceBadge(lyrics.source), [lyrics.source]);
   const lyricDisplayParts = useMemo(
     () => lyrics.mode === "synced" ? lyrics.lines.map((line) => splitLyricDisplayParts(line.text)) : [],
     [lyrics]
@@ -426,13 +421,6 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
                 <section
                   className="lyrics-stage"
                 >
-                  <div className="lyrics-stage-head">
-                    <div className="lyrics-stage-toolbar">
-                      {lyricsSource ? (
-                        <span className="lyrics-stage-badge">{lyricsSource.toLowerCase()}</span>
-                      ) : null}
-                    </div>
-                  </div>
                   <div
                     ref={setLyricsScrollRef}
                     className="lyrics-scroll"
@@ -444,27 +432,6 @@ export const ExpandedPlayer = memo(function ExpandedPlayer({
                 <section
                   className="lyrics-stage"
                 >
-                  <div className="lyrics-stage-head">
-                    <div className="lyrics-stage-toolbar">
-                      {lyricsHaveTranslations ? (
-                        <button
-                          type="button"
-                          className={`lyrics-translation-toggle ${showLyricTranslations ? "active" : ""}`}
-                          onClick={() => {
-                            setShowLyricTranslations((current) => !current);
-                          }}
-                          aria-pressed={showLyricTranslations}
-                          aria-label={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
-                          title={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
-                        >
-                          译
-                        </button>
-                      ) : null}
-                      {lyricsSource ? (
-                        <span className="lyrics-stage-badge">{lyricsSource.toLowerCase()}</span>
-                      ) : null}
-                    </div>
-                  </div>
                   <div
                     ref={setLyricsScrollRef}
                     className="lyrics-scroll synced-lyrics"

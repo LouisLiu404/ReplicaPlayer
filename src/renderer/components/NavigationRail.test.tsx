@@ -41,17 +41,18 @@ describe("NavigationRail", () => {
     expect(container.querySelector(".rail-topmark")).toBeNull();
   });
 
-  it("keeps folder scope buttons clickable from the settings view", () => {
+  it("routes folder choices and the dedicated settings launcher independently", () => {
     const onSelectRoot = vi.fn();
+    const onOpenSettings = vi.fn();
 
     render(
       <NavigationRail
-        activeView="settings"
+        activeView="library"
         roots={ROOTS}
         selectedRootId=""
         allFoldersTrackCount={26}
         onSelectRoot={onSelectRoot}
-        onOpenSettings={vi.fn()}
+        onOpenSettings={onOpenSettings}
       />
     );
 
@@ -64,6 +65,9 @@ describe("NavigationRail", () => {
     expect(screen.getByRole("button", { name: /古风DJ/i }).title).toBe(
       "古风DJ — /Users/liuyike/Music/古风DJ"
     );
-    expect(screen.getByRole("button", { name: "Settings" }).title).toBe("Settings");
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
+    fireEvent.click(settingsButton);
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(settingsButton.classList.contains("rail-footer-button")).toBe(true);
   });
 });

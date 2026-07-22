@@ -25,6 +25,10 @@ vi.mock("./streamer", () => ({
     "--streamer-player-a": "rgba(255, 120, 0, 0.18)",
     "--streamer-player-b": "rgba(255, 80, 0, 0.18)",
     "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
+    "--streamer-control-accent": "rgb(255, 180, 120)",
+    "--streamer-control-accent-strong": "rgb(255, 210, 170)",
+    "--streamer-control-accent-soft": "rgba(255, 180, 120, 0.28)",
+    "--streamer-control-accent-faint": "rgba(255, 180, 120, 0.12)",
     "--streamer-opacity": "0.5",
     "--streamer-player-opacity": "0.32"
   },
@@ -36,6 +40,10 @@ vi.mock("./streamer", () => ({
     "--streamer-player-a": "rgba(255, 120, 0, 0.18)",
     "--streamer-player-b": "rgba(255, 80, 0, 0.18)",
     "--streamer-surface-highlight": "rgba(255, 200, 80, 0.1)",
+    "--streamer-control-accent": "rgb(255, 180, 120)",
+    "--streamer-control-accent-strong": "rgb(255, 210, 170)",
+    "--streamer-control-accent-soft": "rgba(255, 180, 120, 0.28)",
+    "--streamer-control-accent-faint": "rgba(255, 180, 120, 0.12)",
     "--streamer-opacity": "0.5",
     "--streamer-player-opacity": "0.32"
   }))
@@ -70,16 +78,27 @@ vi.mock("./components/NavigationRail", () => ({
 vi.mock("./components/TopBar", () => ({
   TopBar: ({
     search,
+    currentRootLabel,
+    visibleTrackCount,
+    isLibraryScrolled,
     onSearchChange
   }: {
     search: string;
+    currentRootLabel: string;
+    visibleTrackCount: number;
+    isLibraryScrolled: boolean;
     onSearchChange: (value: string) => void;
   }) => (
-    <input
-      aria-label="Search tracks"
-      value={search}
-      onChange={(event) => onSearchChange((event.target as HTMLInputElement).value)}
-    />
+    <>
+      <input
+        aria-label="Search tracks"
+        value={search}
+        onChange={(event) => onSearchChange((event.target as HTMLInputElement).value)}
+      />
+      <div data-testid="compact-library-context">
+        {isLibraryScrolled ? `${currentRootLabel}:${visibleTrackCount}` : "hidden"}
+      </div>
+    </>
   )
 }));
 
@@ -427,13 +446,39 @@ describe("App", () => {
       expect(screen.getByTestId("settings-view")).toBeTruthy();
     });
     expect(document.querySelector(".window-drag-strip")).toBe(dragStrip);
+    expect(document.querySelector(".settings-overlay")?.parentElement?.classList.contains("app-shell")).toBe(true);
+    expect(document.querySelector(".app-workspace")?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.queryByTestId("bottom-player-track")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "All folders 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("settings-view")).toBeNull();
+      expect(screen.getByTestId("bottom-player-track")).toBeTruthy();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Toggle expanded player" }));
     await waitFor(() => {
       expect(screen.getByTestId("expanded-player")).toBeTruthy();
     });
     expect(document.querySelector(".window-drag-strip")).toBe(dragStrip);
+  });
+
+  it("promotes a compact library context into the toolbar after scrolling", async () => {
+    await renderAppWithMock();
+
+    const libraryMain = document.querySelector(".library-main-shell");
+    if (!(libraryMain instanceof HTMLElement)) {
+      throw new Error("Library scroll container not found");
+    }
+
+    expect(screen.getByTestId("compact-library-context").textContent).toBe("hidden");
+
+    libraryMain.scrollTop = 24;
+    fireEvent.scroll(libraryMain);
+    expect(screen.getByTestId("compact-library-context").textContent).toBe("All folders:2");
+
+    libraryMain.scrollTop = 0;
+    fireEvent.scroll(libraryMain);
+    expect(screen.getByTestId("compact-library-context").textContent).toBe("hidden");
   });
 
   it("subdues the shell glow while the window is inactive", async () => {
@@ -508,7 +553,7 @@ describe("App", () => {
       expect(window.localStorage.getItem(DEFAULT_EXPANDED_TAB_STORAGE_KEY)).toBe("queue");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "All folders 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Toggle expanded player" }));
 
     await waitFor(() => {
@@ -573,7 +618,7 @@ describe("App", () => {
       expect(window.localStorage.getItem(TRACK_SORT_STORAGE_KEY)).toBe("modified-asc");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "All folders 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
 
     await waitFor(() => {
       const lastCall = mock.queryTracks.mock.calls.at(-1)?.[0] as QueryArg | undefined;

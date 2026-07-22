@@ -51,6 +51,10 @@ describe("BottomPlayer", () => {
         currentTimeMs={0}
         durationMs={TRACK.durationMs}
         volumePercent={100}
+        showLyricsTools={false}
+        lyricsSource={null}
+        lyricsHaveTranslations={false}
+        showLyricTranslations
         canStepPrev
         canStepNext
         onStepPrev={vi.fn()}
@@ -58,6 +62,7 @@ describe("BottomPlayer", () => {
         onTogglePlay={vi.fn()}
         onSeek={vi.fn()}
         onVolumeChange={vi.fn()}
+        onToggleLyricTranslations={vi.fn()}
         onCyclePlaybackMode={vi.fn()}
         onTogglePanel={onTogglePanel}
       />
@@ -82,6 +87,10 @@ describe("BottomPlayer", () => {
         currentTimeMs={0}
         durationMs={TRACK.durationMs}
         volumePercent={80}
+        showLyricsTools={false}
+        lyricsSource={null}
+        lyricsHaveTranslations={false}
+        showLyricTranslations
         canStepPrev
         canStepNext
         onStepPrev={vi.fn()}
@@ -89,6 +98,7 @@ describe("BottomPlayer", () => {
         onTogglePlay={vi.fn()}
         onSeek={vi.fn()}
         onVolumeChange={onVolumeChange}
+        onToggleLyricTranslations={vi.fn()}
         onCyclePlaybackMode={vi.fn()}
         onTogglePanel={vi.fn()}
       />
@@ -103,6 +113,42 @@ describe("BottomPlayer", () => {
 
     fireEvent.change(slider, { target: { value: "42" } });
     expect(onVolumeChange).toHaveBeenCalledWith(42);
+  });
+
+  it("places lyric controls beside volume while the expanded lyrics view is active", () => {
+    const onToggleLyricTranslations = vi.fn();
+    render(
+      <BottomPlayer
+        track={TRACK}
+        isPlaying={false}
+        isExpanded
+        isSettingsView={false}
+        canPlay
+        playbackMode="repeat-all"
+        currentTimeMs={0}
+        durationMs={TRACK.durationMs}
+        volumePercent={80}
+        showLyricsTools
+        lyricsSource="Embed"
+        lyricsHaveTranslations
+        showLyricTranslations
+        canStepPrev
+        canStepNext
+        onStepPrev={vi.fn()}
+        onStepNext={vi.fn()}
+        onTogglePlay={vi.fn()}
+        onSeek={vi.fn()}
+        onVolumeChange={vi.fn()}
+        onToggleLyricTranslations={onToggleLyricTranslations}
+        onCyclePlaybackMode={vi.fn()}
+        onTogglePanel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("embed")).toBeTruthy();
+    const translationToggle = screen.getByRole("button", { name: "Hide lyric translation" });
+    fireEvent.click(translationToggle);
+    expect(onToggleLyricTranslations).toHaveBeenCalledOnce();
   });
 
   it("throttles pointer move updates via requestAnimationFrame", () => {
@@ -130,6 +176,10 @@ describe("BottomPlayer", () => {
         currentTimeMs={0}
         durationMs={TRACK.durationMs}
         volumePercent={100}
+        showLyricsTools={false}
+        lyricsSource={null}
+        lyricsHaveTranslations={false}
+        showLyricTranslations
         canStepPrev
         canStepNext
         onStepPrev={vi.fn()}
@@ -137,6 +187,7 @@ describe("BottomPlayer", () => {
         onTogglePlay={vi.fn()}
         onSeek={vi.fn()}
         onVolumeChange={vi.fn()}
+        onToggleLyricTranslations={vi.fn()}
         onCyclePlaybackMode={vi.fn()}
         onTogglePanel={vi.fn()}
       />
@@ -188,6 +239,10 @@ describe("BottomPlayer", () => {
         currentTimeMs={0}
         durationMs={TRACK.durationMs}
         volumePercent={100}
+        showLyricsTools={false}
+        lyricsSource={null}
+        lyricsHaveTranslations={false}
+        showLyricTranslations
         canStepPrev
         canStepNext
         onStepPrev={vi.fn()}
@@ -195,6 +250,7 @@ describe("BottomPlayer", () => {
         onTogglePlay={vi.fn()}
         onSeek={vi.fn()}
         onVolumeChange={vi.fn()}
+        onToggleLyricTranslations={vi.fn()}
         onCyclePlaybackMode={vi.fn()}
         onTogglePanel={vi.fn()}
       />

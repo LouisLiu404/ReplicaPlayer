@@ -66,112 +66,126 @@ export function SettingsView({
 
   return (
     <section className="settings-view">
-      <div className="settings-hero">
-        <div>
-          <p className="section-kicker">Settings</p>
-          <h1>Tracked folders</h1>
+      <header className="settings-hero">
+        <div className="settings-hero-icon" aria-hidden="true">
+          <SettingsIcon />
+        </div>
+        <div className="settings-hero-copy">
+          <p className="section-kicker">Replica Player</p>
+          <h1 id="settings-page-title">Settings</h1>
           <p className="settings-copy">
-            Configure the local folders Replica Player keeps indexed between launches. Library rescans also live here.
+            Manage your local library, playback defaults, and visual atmosphere.
           </p>
         </div>
+      </header>
 
-        <div className="settings-actions">
-          <button type="button" className="cta-button" onClick={onAddRoots}>
-            <PlusIcon />
-            <span>Add Folders</span>
-          </button>
-          <button type="button" className="cta-button secondary" onClick={onRescan} disabled={roots.length === 0}>
-            <RefreshIcon />
-            <span>Rescan</span>
-          </button>
+      <section className="settings-section-card settings-library-card" aria-labelledby="settings-library-folders">
+        <div className="settings-section-head">
+          <div className="settings-section-copy">
+            <h2 id="settings-library-folders">Library folders</h2>
+            <p>Choose which local folders Replica Player indexes and remembers between launches.</p>
+          </div>
+
+          <div className="settings-actions">
+            <button type="button" className="cta-button" onClick={onAddRoots}>
+              <PlusIcon />
+              <span>Add folders</span>
+            </button>
+            <button type="button" className="cta-button secondary" onClick={onRescan} disabled={roots.length === 0}>
+              <RefreshIcon />
+              <span>Rescan</span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {scanProgress ? (
-        <div className="settings-scan-banner">
-          <strong>{scanPhaseLabel(scanProgress.phase)}</strong>
-          <span>{scanProgress.message ?? `${scanProgress.processedFiles} / ${scanProgress.discoveredFiles} files`}</span>
-        </div>
-      ) : null}
+        {scanProgress ? (
+          <div className="settings-scan-banner">
+            <strong>{scanPhaseLabel(scanProgress.phase)}</strong>
+            <span>{scanProgress.message ?? `${scanProgress.processedFiles} / ${scanProgress.discoveredFiles} files`}</span>
+          </div>
+        ) : null}
 
-      {roots.length === 0 ? (
-        <EmptyState
-          title="No tracked folders"
-          description="Add a folder to build the library. Replica Player indexes music in place and remembers it next launch."
-          actionLabel="Add Folders"
-          onAction={onAddRoots}
-          icon={<SettingsIcon className="empty-state-glyph" />}
-        />
-      ) : (
-        <div className="settings-root-list">
-          {roots.map((root) => (
-            <article key={root.id} className="settings-root-card">
-              <div className="settings-root-icon">
-                <FolderIcon className="settings-root-glyph" />
-              </div>
-              <div className="settings-root-copy">
-                <strong>{root.displayName}</strong>
-                <span>{root.path}</span>
-                <small>{root.status === "available" ? "Available" : root.lastError || "Unavailable"}</small>
-              </div>
+        {roots.length === 0 ? (
+          <EmptyState
+            title="No tracked folders"
+            description="Add a folder to build the library. Replica Player indexes music in place and remembers it next launch."
+            actionLabel="Add folders"
+            onAction={onAddRoots}
+            icon={<SettingsIcon className="empty-state-glyph" />}
+          />
+        ) : (
+          <div className="settings-root-list">
+            {roots.map((root) => (
+              <article key={root.id} className="settings-root-card">
+                <div className="settings-root-icon">
+                  <FolderIcon className="settings-root-glyph" />
+                </div>
+                <div className="settings-root-copy">
+                  <strong>{root.displayName}</strong>
+                  <span>{root.path}</span>
+                  <small>{root.status === "available" ? "Available" : root.lastError || "Unavailable"}</small>
+                </div>
+                <button
+                  type="button"
+                  className="settings-remove-button"
+                  onClick={() => onRemoveRoot(root.id)}
+                  aria-label={`Remove ${root.displayName}`}
+                >
+                  Remove
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="settings-preferences-grid">
+        <section className="settings-section-card" aria-labelledby="expanded-player-default-tab">
+          <div className="settings-section-copy">
+            <h2 id="expanded-player-default-tab">Expanded player</h2>
+            <p>Choose which panel opens first from the bottom player.</p>
+          </div>
+
+          <div className="settings-tab-option-row" role="radiogroup" aria-label="Expanded player default tab">
+            {expandedTabOptions.map((option) => (
               <button
+                key={option.id}
                 type="button"
-                className="settings-remove-button"
-                onClick={() => onRemoveRoot(root.id)}
-                aria-label={`Remove ${root.displayName}`}
+                role="radio"
+                aria-checked={defaultExpandedTab === option.id}
+                className={`settings-tab-option ${defaultExpandedTab === option.id ? "active" : ""}`}
+                onClick={() => onDefaultExpandedTabChange(option.id)}
               >
-                Remove
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
               </button>
-            </article>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        </section>
 
-      <section className="settings-section-card" aria-labelledby="expanded-player-default-tab">
-        <div className="settings-section-copy">
-          <h2 id="expanded-player-default-tab">Expanded player default tab</h2>
-          <p>Choose which panel opens first when you expand the player from the bottom bar.</p>
-        </div>
+        <section className="settings-section-card" aria-labelledby="track-sort-default">
+          <div className="settings-section-copy">
+            <h2 id="track-sort-default">Track order</h2>
+            <p>Choose the default ordering for library and folder track lists.</p>
+          </div>
 
-        <div className="settings-tab-option-row" role="radiogroup" aria-label="Expanded player default tab">
-          {expandedTabOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={defaultExpandedTab === option.id}
-              className={`settings-tab-option ${defaultExpandedTab === option.id ? "active" : ""}`}
-              onClick={() => onDefaultExpandedTabChange(option.id)}
-            >
-              <strong>{option.label}</strong>
-              <span>{option.description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="settings-section-card" aria-labelledby="track-sort-default">
-        <div className="settings-section-copy">
-          <h2 id="track-sort-default">Track list sort</h2>
-          <p>Choose the default ordering for library and folder track lists.</p>
-        </div>
-
-        <div className="settings-tab-option-row" role="radiogroup" aria-label="Track list sort">
-          {trackSortOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={trackSort === option.id}
-              className={`settings-tab-option ${trackSort === option.id ? "active" : ""}`}
-              onClick={() => onTrackSortChange(option.id)}
-            >
-              <strong>{option.label}</strong>
-              <span>{option.description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+          <div className="settings-tab-option-row settings-sort-options" role="radiogroup" aria-label="Track list sort">
+            {trackSortOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={trackSort === option.id}
+                className={`settings-tab-option ${trackSort === option.id ? "active" : ""}`}
+                onClick={() => onTrackSortChange(option.id)}
+              >
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
 
       <section className="settings-section-card" aria-labelledby="visual-effects-settings">
         <div className="settings-section-copy">

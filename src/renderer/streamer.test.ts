@@ -20,7 +20,7 @@ function createPixelBuffer(colors: Array<[number, number, number, number?]>): Ui
 
 function parseRgba(value: string): { r: number; g: number; b: number; alpha: number } {
   const match = value.match(
-    /rgba\((?<r>\d+),\s*(?<g>\d+),\s*(?<b>\d+),\s*(?<alpha>[\d.]+)\)/
+    /rgba?\((?<r>\d+),\s*(?<g>\d+),\s*(?<b>\d+)(?:,\s*(?<alpha>[\d.]+))?\)/
   );
 
   if (!match?.groups) {
@@ -31,7 +31,7 @@ function parseRgba(value: string): { r: number; g: number; b: number; alpha: num
     r: Number.parseFloat(match.groups.r),
     g: Number.parseFloat(match.groups.g),
     b: Number.parseFloat(match.groups.b),
-    alpha: Number.parseFloat(match.groups.alpha)
+    alpha: match.groups.alpha == null ? 1 : Number.parseFloat(match.groups.alpha)
   };
 }
 
@@ -86,5 +86,35 @@ describe("deriveStreamerVarsFromPixels", () => {
 
     expect(highlight.alpha).toBeGreaterThan(0.08);
     expect(relativeLuminance(highlight.r, highlight.g, highlight.b)).toBeGreaterThan(0.18);
+  });
+
+  it("derives a bright control accent from colorful artwork", () => {
+    const pixels = createPixelBuffer([
+      [12, 42, 92],
+      [18, 90, 156],
+      [72, 170, 220]
+    ]);
+
+    const accent = parseRgba(
+      deriveStreamerVarsFromPixels(pixels)["--streamer-control-accent"]
+    );
+
+    expect(accent.b).toBeGreaterThan(accent.r);
+    expect(relativeLuminance(accent.r, accent.g, accent.b)).toBeGreaterThanOrEqual(0.42);
+  });
+
+  it("lifts grayscale artwork to a readable neutral accent", () => {
+    const pixels = createPixelBuffer([
+      [18, 18, 20],
+      [50, 50, 54],
+      [100, 100, 104]
+    ]);
+
+    const accent = parseRgba(
+      deriveStreamerVarsFromPixels(pixels)["--streamer-control-accent"]
+    );
+
+    expect(Math.max(accent.r, accent.g, accent.b) - Math.min(accent.r, accent.g, accent.b)).toBeLessThan(24);
+    expect(relativeLuminance(accent.r, accent.g, accent.b)).toBeGreaterThanOrEqual(0.42);
   });
 });

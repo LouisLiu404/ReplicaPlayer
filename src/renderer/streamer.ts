@@ -18,6 +18,10 @@ export type StreamerVars = {
   "--streamer-player-a": string;
   "--streamer-player-b": string;
   "--streamer-surface-highlight": string;
+  "--streamer-control-accent": string;
+  "--streamer-control-accent-strong": string;
+  "--streamer-control-accent-soft": string;
+  "--streamer-control-accent-faint": string;
   "--streamer-opacity": string;
   "--streamer-player-opacity": string;
 };
@@ -30,6 +34,10 @@ export const DEFAULT_STREAMER_VARS: StreamerVars = {
   "--streamer-player-a": "rgba(255, 120, 92, 0.24)",
   "--streamer-player-b": "rgba(255, 184, 78, 0.18)",
   "--streamer-surface-highlight": "rgba(255, 210, 146, 0.12)",
+  "--streamer-control-accent": "rgb(255, 153, 132)",
+  "--streamer-control-accent-strong": "rgb(255, 190, 174)",
+  "--streamer-control-accent-soft": "rgba(255, 153, 132, 0.28)",
+  "--streamer-control-accent-faint": "rgba(255, 153, 132, 0.12)",
   "--streamer-opacity": "0.92",
   "--streamer-player-opacity": "0.84"
 };
@@ -49,6 +57,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function toRgba({ r, g, b }: RGB, alpha: number): string {
   return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
+}
+
+function toRgb({ r, g, b }: RGB): string {
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
 }
 
 function adjustColor({ r, g, b }: RGB, delta: number): RGB {
@@ -318,6 +330,14 @@ export function deriveStreamerVarsFromPixels(pixels: Uint8ClampedArray): Streame
   const playerHighlight = mixColors(highlight, luminousHighlight, 0.36 + (contrastLift * 0.14));
   const playerAccent = mixColors(accent, luminousHighlight, 0.2 + (contrastLift * 0.12));
   const surfaceHighlight = mixColors(luminousHighlight, soft, 0.28);
+  const controlAccent = ensureMinLuminance(
+    mixColors(luminousHighlight, accent, 0.12),
+    0.42
+  );
+  const controlAccentStrong = ensureMinLuminance(
+    mixColors(controlAccent, { r: 255, g: 255, b: 255 }, 0.18),
+    0.58
+  );
 
   return {
     "--streamer-color-a": toRgba(base, 0.24 + (contrastLift * 0.08)),
@@ -327,6 +347,10 @@ export function deriveStreamerVarsFromPixels(pixels: Uint8ClampedArray): Streame
     "--streamer-player-a": toRgba(playerHighlight, 0.26 + (darkArtworkBias * 0.12)),
     "--streamer-player-b": toRgba(playerAccent, 0.2 + (darkArtworkBias * 0.1)),
     "--streamer-surface-highlight": toRgba(surfaceHighlight, 0.12 + (darkArtworkBias * 0.08)),
+    "--streamer-control-accent": toRgb(controlAccent),
+    "--streamer-control-accent-strong": toRgb(controlAccentStrong),
+    "--streamer-control-accent-soft": toRgba(controlAccent, 0.28),
+    "--streamer-control-accent-faint": toRgba(controlAccent, 0.12),
     "--streamer-opacity": (0.94 + (darkArtworkBias * 0.16)).toFixed(2),
     "--streamer-player-opacity": (0.88 + (darkArtworkBias * 0.18)).toFixed(2)
   };

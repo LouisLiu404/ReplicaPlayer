@@ -25,6 +25,10 @@ interface BottomPlayerProps {
   currentTimeMs: number;
   durationMs: number;
   volumePercent: number;
+  showLyricsTools: boolean;
+  lyricsSource: "Embed" | "External" | null;
+  lyricsHaveTranslations: boolean;
+  showLyricTranslations: boolean;
   canStepPrev: boolean;
   canStepNext: boolean;
   onStepPrev: () => void;
@@ -32,6 +36,7 @@ interface BottomPlayerProps {
   onTogglePlay: () => void;
   onSeek: (nextPositionMs: number) => void;
   onVolumeChange: (nextVolumePercent: number) => void;
+  onToggleLyricTranslations: () => void;
   onCyclePlaybackMode: () => void;
   onTogglePanel: () => void;
   playerArtButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -52,6 +57,10 @@ export function BottomPlayer({
   currentTimeMs,
   durationMs,
   volumePercent,
+  showLyricsTools,
+  lyricsSource,
+  lyricsHaveTranslations,
+  showLyricTranslations,
   canStepPrev,
   canStepNext,
   onStepPrev,
@@ -59,6 +68,7 @@ export function BottomPlayer({
   onTogglePlay,
   onSeek,
   onVolumeChange,
+  onToggleLyricTranslations,
   onCyclePlaybackMode,
   onTogglePanel,
   playerArtButtonRef
@@ -206,22 +216,46 @@ export function BottomPlayer({
         </div>
       </div>
 
-      <div className="volume-control">
-        <VolumeIcon className="volume-icon" />
-        <div className="volume-popover">
-          <div className="volume-slider-shell">
-            <input
-              type="range"
-              className="volume-slider"
-              min={0}
-              max={100}
-              value={volumePercent}
-              onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
-              aria-label="Volume"
-              aria-valuetext={`${Math.round(volumePercent)}%`}
-            />
+      <div className="bottom-player-utilities">
+        {showLyricsTools && (lyricsHaveTranslations || lyricsSource) ? (
+          <div className="bottom-player-lyrics-tools" role="group" aria-label="Lyric options">
+            {lyricsHaveTranslations ? (
+              <button
+                type="button"
+                className={`bottom-player-translation-toggle ${showLyricTranslations ? "active" : ""}`}
+                onClick={onToggleLyricTranslations}
+                aria-pressed={showLyricTranslations}
+                aria-label={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
+                title={showLyricTranslations ? "Hide lyric translation" : "Show lyric translation"}
+              >
+                译
+              </button>
+            ) : null}
+            {lyricsSource ? (
+              <span className="bottom-player-lyrics-source" title={`${lyricsSource} lyrics`}>
+                {lyricsSource.toLowerCase()}
+              </span>
+            ) : null}
           </div>
-          <span className="volume-value" aria-hidden="true">{Math.round(volumePercent)}%</span>
+        ) : null}
+
+        <div className="volume-control" role="group" aria-label="Volume control" tabIndex={0}>
+          <VolumeIcon className="volume-icon" />
+          <div className="volume-popover">
+            <div className="volume-slider-shell">
+              <input
+                type="range"
+                className="volume-slider"
+                min={0}
+                max={100}
+                value={volumePercent}
+                onChange={(event) => onVolumeChange(Number.parseInt(event.target.value, 10))}
+                aria-label="Volume"
+                aria-valuetext={`${Math.round(volumePercent)}%`}
+              />
+            </div>
+            <span className="volume-value" aria-hidden="true">{Math.round(volumePercent)}%</span>
+          </div>
         </div>
       </div>
     </footer>

@@ -59,6 +59,7 @@ describe("ExpandedPlayer lyrics header", () => {
         trackDetail={TRACK}
         lyrics={SYNCED_TRANSLATED_LYRICS}
         activeLyricLine={0}
+        showLyricTranslations
         streamerVars={DEFAULT_STREAMER_VARS}
         isPlaying={true}
         onSelectTrack={vi.fn()}
@@ -84,8 +85,8 @@ describe("ExpandedPlayer lyrics header", () => {
     expect(onTabChange).toHaveBeenCalledWith("queue");
   });
 
-  it("shows an embed badge and lets translation lines be toggled", () => {
-    render(
+  it("renders translation lines according to the footer-controlled state", () => {
+    const { rerender } = render(
       <ExpandedPlayer
         activeTab="lyrics"
         selectedTrackId="track-1"
@@ -94,6 +95,7 @@ describe("ExpandedPlayer lyrics header", () => {
         trackDetail={TRACK}
         lyrics={SYNCED_TRANSLATED_LYRICS}
         activeLyricLine={0}
+        showLyricTranslations
         streamerVars={DEFAULT_STREAMER_VARS}
         isPlaying={false}
         onSelectTrack={vi.fn()}
@@ -103,32 +105,18 @@ describe("ExpandedPlayer lyrics header", () => {
       />
     );
 
-    expect(screen.getByText("embed")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Hide lyric translation" })).toBeTruthy();
     expect(screen.getByText("严寒再也无法干扰我")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide lyric translation" }));
-
-    expect(screen.getByRole("button", { name: "Show lyric translation" })).toBeTruthy();
-    expect(screen.queryByText("严寒再也无法干扰我")).toBeNull();
-    expect(screen.getByText("The cold never bothered me anyway")).toBeTruthy();
-  });
-
-  it("hides the translation toggle when the synced lyrics have no translation text", () => {
-    render(
+    rerender(
       <ExpandedPlayer
         activeTab="lyrics"
         selectedTrackId="track-1"
         queueTracks={[]}
         queueStartIndex={-1}
         trackDetail={TRACK}
-        lyrics={{
-          mode: "synced",
-          source: "external-lrc",
-          offsetMs: 0,
-          lines: [{ startMs: 0, text: "Plain synced line" }]
-        }}
+        lyrics={SYNCED_TRANSLATED_LYRICS}
         activeLyricLine={0}
+        showLyricTranslations={false}
         streamerVars={DEFAULT_STREAMER_VARS}
         isPlaying={false}
         onSelectTrack={vi.fn()}
@@ -138,7 +126,7 @@ describe("ExpandedPlayer lyrics header", () => {
       />
     );
 
-    expect(screen.getByText("external")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /translation/i })).toBeNull();
+    expect(screen.queryByText("严寒再也无法干扰我")).toBeNull();
+    expect(screen.getByText("The cold never bothered me anyway")).toBeTruthy();
   });
 });

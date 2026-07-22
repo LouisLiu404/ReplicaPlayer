@@ -4,8 +4,10 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
-  useState
+  useState,
+  type UIEvent
 } from "react";
 
 import type {
@@ -16,7 +18,7 @@ import type {
 } from "../shared/types";
 import { BottomPlayer } from "./components/BottomPlayer";
 import { ExpandedPlayer } from "./components/ExpandedPlayer";
-import { ChevronDownIcon } from "./components/icons";
+import { ChevronDownIcon, CloseIcon } from "./components/icons";
 import { LibraryHero } from "./components/LibraryHero";
 import {
   MagicLampTransition,
@@ -28,6 +30,7 @@ import { SettingsView } from "./components/SettingsView";
 import { TopBar } from "./components/TopBar";
 import { TrackTable } from "./components/TrackTable";
 import type { ActivePanelTab, AppView, AvailabilityFilter } from "./components/ui-types";
+import { hasLyricTranslations, lyricSourceBadge } from "./lyrics-display";
 import { currentLyricIndex, nextLyricDelayMs } from "./lyrics-timing";
 import { scrollLyricsContainer } from "./lyrics-scroll";
 import {
@@ -123,6 +126,7 @@ export function App() {
   const lyricRefs = useRef(new Map<number, HTMLDivElement | null>());
   const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const settingsCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const expandedPlayerOverlayRef = useRef<HTMLDivElement | null>(null);
   const playerArtButtonRef = useRef<HTMLButtonElement | null>(null);
   const activePanelTabRef = useRef<ActivePanelTab>("details");
@@ -132,6 +136,7 @@ export function App() {
 
   const [isWindowActive, setIsWindowActive] = useState(true);
   const [activeView, setActiveView] = useState<AppView>("library");
+  const [isLibraryScrolled, setIsLibraryScrolled] = useState(false);
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<TrackListItem[]>([]);
   const [selectedRootId, setSelectedRootId] = useState<string>("");
@@ -152,6 +157,7 @@ export function App() {
   const [activePanelTab, setActivePanelTab] = useState<ActivePanelTab>(() =>
     readStoredDefaultExpandedTab(window.localStorage)
   );
+  const [showLyricTranslations, setShowLyricTranslations] = useState(true);
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [renderExpandedPlayer, setRenderExpandedPlayer] = useState(false);
   const [preloadExpandedPlayer, setPreloadExpandedPlayer] = useState(false);
@@ -234,6 +240,9 @@ export function App() {
 
   useVisualizer(audioRef, appShellRef, true, isMagicLampAnimating);
 
+  const lyricsHaveTranslations = useMemo(() => hasLyricTranslations(lyrics), [lyrics]);
+  const lyricsSource = useMemo(() => lyricSourceBadge(lyrics.source), [lyrics.source]);
+
   const lyricSnapshotRevision = lyrics.mode === "synced"
     ? `${lyrics.source}:${lyrics.lines.length}:${lyrics.lines.at(-1)?.startMs ?? 0}`
     : lyrics.mode === "plain"
@@ -253,6 +262,7 @@ export function App() {
         streamerSnapshotRevision,
         visualEffects.mainBackground,
         visualEffects.playerGlow,
+        showLyricTranslations,
         windowSnapshotRevision
       ].join(":")
     : "";
@@ -768,6 +778,7 @@ export function App() {
   // Clear lyric refs on track change
   useEffect(() => {
     lyricRefs.current.clear();
+    setShowLyricTranslations(true);
   }, [selectedTrackId, lyrics.mode]);
 
   // Library management handlers
@@ -887,6 +898,10 @@ export function App() {
     if (selectedRootId === rootId && activeView === "library") {
       return;
     }
+    if (libraryViewRef.current) {
+      libraryViewRef.current.scrollTop = 0;
+    }
+    setIsLibraryScrolled(false);
     startTransition(() => {
       setIsPlayerExpanded(false);
       setSelectedRootId(rootId);
@@ -900,6 +915,36 @@ export function App() {
 
   const handleOpenSettings = useCallback((): void => {
     setActiveView("settings");
+  }, []);
+
+  const handleCloseSettings = useCallback((): void => {
+    setActiveView("library");
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== "settings") {
+      return;
+    }
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      settingsCloseButtonRef.current?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCloseSettings();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeView, handleCloseSettings]);
+
+  const handleLibraryScroll = useCallback((event: UIEvent<HTMLElement>): void => {
+    const nextIsScrolled = event.currentTarget.scrollTop > 12;
+    setIsLibraryScrolled((current) => current === nextIsScrolled ? current : nextIsScrolled);
   }, []);
 
   const handleTogglePanel = useCallback((): void => {
@@ -1015,7 +1060,7 @@ export function App() {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"} ${renderExpandedPlayer ? "player-overlay-mounted" : ""} ${isMagicLampAnimating ? "magic-lamp-active" : ""}`}
+      className={`app-shell ${isWindowActive ? "window-active" : "window-inactive"} ${renderExpandedPlayer ? "player-overlay-mounted" : ""} ${isSettingsView ? "settings-overlay-mounted" : ""} ${isMagicLampAnimating ? "magic-lamp-active" : ""}`}
     >
       <audio ref={audioRef} />
       <ScanProgressModal
@@ -1030,7 +1075,17 @@ export function App() {
       />
 
       <div className="window-drag-strip">
-        {isPlayerExpanded ? (
+        {isSettingsView ? (
+          <button
+            ref={settingsCloseButtonRef}
+            type="button"
+            className="window-settings-close-button"
+            onClick={handleCloseSettings}
+            aria-label="Close settings"
+          >
+            <CloseIcon />
+          </button>
+        ) : isPlayerExpanded ? (
           <button
             type="button"
             className="window-collapse-button"
@@ -1042,7 +1097,11 @@ export function App() {
         ) : null}
       </div>
 
-      <div className={`app-workspace ${isPlayerExpanded ? "expanded" : ""}`}>
+      <div
+        className={`app-workspace ${isPlayerExpanded ? "expanded" : ""} ${isSettingsView ? "settings-covered" : ""}`}
+        aria-hidden={isSettingsView || undefined}
+        inert={isSettingsView || undefined}
+      >
         <NavigationRail
           activeView={activeView}
           roots={roots}
@@ -1052,12 +1111,16 @@ export function App() {
           onOpenSettings={handleOpenSettings}
         />
 
-        <div className={`app-main ${isPlayerExpanded ? "expanded" : ""} ${isSettingsView ? "settings" : ""}`}>
+        <div className={`app-main ${isPlayerExpanded ? "expanded" : ""} ${isSettingsView ? "settings" : ""} ${isLibraryScrolled ? "library-scrolled" : ""}`}>
           {!isSettingsView ? (
             <TopBar
               search={search}
               searchInputRef={searchInputRef}
               scanProgress={scanProgress}
+              currentRootLabel={currentRootLabel}
+              visibleTrackCount={visibleTracks.length}
+              isLoading={isLoadingLibrary}
+              isLibraryScrolled={isLibraryScrolled}
               onSearchChange={setSearch}
             />
           ) : null}
@@ -1070,6 +1133,7 @@ export function App() {
                 libraryViewRef.current = null;
               }
             }}
+            onScroll={handleLibraryScroll}
             className={`main-view-shell ${isSettingsView ? "settings-main-shell" : "library-main-shell"} ${isPlayerExpanded ? "panel-open" : ""}`}
           >
             {!isPlayerExpanded ? (
@@ -1092,22 +1156,7 @@ export function App() {
                   </div>
                 ) : null}
 
-                {isSettingsView ? (
-                  <SettingsView
-                    roots={roots}
-                    scanProgress={scanProgress}
-                    defaultExpandedTab={defaultExpandedTab}
-                    trackSort={trackSort}
-                    visualEffects={visualEffects}
-                    onAddRoots={() => void handleAddRoots()}
-                    onRescan={() => void handleRescan()}
-                    onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
-                    onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
-                    onTrackSortChange={handleTrackSortChange}
-                    onVisualEffectChange={handleVisualEffectChange}
-                    onOpenExternal={(url) => void window.system.openExternal(url)}
-                  />
-                ) : (
+                {isSettingsView ? null : (
                   <>
                     <LibraryHero
                       currentRootLabel={currentRootLabel}
@@ -1141,6 +1190,27 @@ export function App() {
 
       </div>
 
+      {isSettingsView ? (
+        <section className="settings-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-page-title">
+          <main className="settings-overlay-scroll">
+            <SettingsView
+              roots={roots}
+              scanProgress={scanProgress}
+              defaultExpandedTab={defaultExpandedTab}
+              trackSort={trackSort}
+              visualEffects={visualEffects}
+              onAddRoots={() => void handleAddRoots()}
+              onRescan={() => void handleRescan()}
+              onRemoveRoot={(rootId) => void handleRemoveRoot(rootId)}
+              onDefaultExpandedTabChange={handleDefaultExpandedTabChange}
+              onTrackSortChange={handleTrackSortChange}
+              onVisualEffectChange={handleVisualEffectChange}
+              onOpenExternal={(url) => void window.system.openExternal(url)}
+            />
+          </main>
+        </section>
+      ) : null}
+
       {renderExpandedPlayer || preloadExpandedPlayer ? (
         <div
           ref={expandedPlayerOverlayRef}
@@ -1163,6 +1233,7 @@ export function App() {
               trackDetail={trackDetail}
               lyrics={lyrics}
               activeLyricLine={activeLyricLine}
+              showLyricTranslations={showLyricTranslations}
               streamerVars={streamerVars}
               isPlaying={isPlaying}
               onSelectTrack={setSelectedTrackId}
@@ -1189,7 +1260,7 @@ export function App() {
         onFallback={handleMagicLampFallback}
       />
 
-      <BottomPlayer
+      {!isSettingsView ? <BottomPlayer
         track={trackDetail}
         isPlaying={isPlaying}
         isExpanded={isPlayerExpanded}
@@ -1199,6 +1270,10 @@ export function App() {
         currentTimeMs={playbackPositionMs}
         durationMs={durationMs || trackDetail?.durationMs || 0}
         volumePercent={volumePercent}
+        showLyricsTools={renderExpandedPlayer && activePanelTab === "lyrics"}
+        lyricsSource={lyricsSource}
+        lyricsHaveTranslations={lyricsHaveTranslations}
+        showLyricTranslations={showLyricTranslations}
         canStepPrev={
           playbackPositionMs >= 3000 ||
           (playbackMode === "shuffle"
@@ -1219,10 +1294,13 @@ export function App() {
         onTogglePlay={handleTogglePlay}
         onSeek={handleSeek}
         onVolumeChange={handleVolumeChange}
+        onToggleLyricTranslations={() => {
+          setShowLyricTranslations((current) => !current);
+        }}
         onCyclePlaybackMode={handleCyclePlaybackMode}
         onTogglePanel={handleTogglePanel}
         playerArtButtonRef={playerArtButtonRef}
-      />
+      /> : null}
     </div>
   );
 }
